@@ -1,11 +1,11 @@
 [package]
 name = "obj-renderer-rust"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 
-obj = "0.11"
-mtl = "0.2"
-math3d = "0.2"
+obj-rs = "0.7.4"
+rs-math3d = "0.9.24"
 clap = { version = "4.5", features = ["derive"] }
+image = "0.24"
