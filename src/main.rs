@@ -1,24 +1,33 @@
 
-use std::env;
+
+use clap::Parser;
 use obj::{Obj, load_obj};
 use mtl::{Mtl, load_mtl};
 mod scene;
 use scene::{Scene, ColoredTriangle};
 
+
+/// @brief Command line arguments for obj-renderer
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the OBJ file
+    #[arg(long = "obj-file")]
+    obj_file: String,
+
+    /// Path to the MTL file
+    #[arg(long = "mtl-file")]
+    mtl_file: String,
+}
+
 /// @brief Main entry point. Loads .obj and .mtl files, builds scene.
-/// @param args Command line arguments: <obj_file> <mtl_file>
+/// @param args Command line arguments: --obj-file <obj_file> --mtl-file <mtl_file>
 /// @return Exit code
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!("Usage: {} <obj_file> <mtl_file>", args[0]);
-        std::process::exit(1);
-    }
-    let obj_path = &args[1];
-    let mtl_path = &args[2];
+    let args = Args::parse();
 
     // Load OBJ
-    let obj: Obj = match load_obj(obj_path) {
+    let obj: Obj = match load_obj(&args.obj_file) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("Failed to load OBJ: {}", e);
@@ -27,7 +36,7 @@ fn main() {
     };
 
     // Load MTL
-    let mtl: Mtl = match load_mtl(mtl_path) {
+    let mtl: Mtl = match load_mtl(&args.mtl_file) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("Failed to load MTL: {}", e);
