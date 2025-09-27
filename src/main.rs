@@ -65,7 +65,7 @@ fn main() {
                     ];
                     // Get color from MTL
                     let color = mtl.materials.get(&group.material).map(|mat| mat.kd).unwrap_or([1.0, 1.0, 1.0]);
-                    scene.triangles.push(ColoredTriangle { vertices, color });
+                    scene.add_colored_triangle(ColoredTriangle { vertices, color });
                 }
             }
         }

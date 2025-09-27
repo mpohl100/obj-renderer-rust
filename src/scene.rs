@@ -12,8 +12,8 @@ pub struct ColoredTriangle {
 /// @param triangles The triangles in the scene
 /// @param coordinate_system The coordinate system (standard cartesian)
 pub struct Scene {
-    pub triangles: Vec<ColoredTriangle>,
-    pub coordinate_system: CoordinateSystem3D,
+    triangles: Vec<ColoredTriangle>,
+    coordinate_system: CoordinateSystem3D,
 }
 
 use math3d::CoordinateSystem3D;
@@ -26,5 +26,23 @@ impl Scene {
             triangles: Vec::new(),
             coordinate_system: CoordinateSystem3D::standard(),
         }
+    }
+
+    /// @brief Adds a colored triangle to the scene
+    /// @param triangle The ColoredTriangle to add
+    pub fn add_colored_triangle(&mut self, triangle: ColoredTriangle) {
+        self.triangles.push(triangle);
+    }
+
+    /// @brief Returns a reference to the triangles in the scene
+    /// @return Reference to Vec<ColoredTriangle>
+    pub fn triangles(&self) -> &Vec<ColoredTriangle> {
+        &self.triangles
+    }
+
+    /// @brief Returns a reference to the coordinate system
+    /// @return Reference to CoordinateSystem3D
+    pub fn coordinate_system(&self) -> &CoordinateSystem3D {
+        &self.coordinate_system
     }
 }
