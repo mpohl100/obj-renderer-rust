@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 
-obj-rs = "0.7.4"
+wavefront_obj = "11.0.0"
 rs-math3d = "0.9.24"
 clap = { version = "4.5", features = ["derive"] }
 image = "0.24"
