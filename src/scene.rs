@@ -1,3 +1,4 @@
+use clap::Error;
 use rs_math3d::{CrossProduct, Vec3d};
 use rs_math3d::Vector;
 use rs_math3d::FloatVector;
@@ -91,6 +92,9 @@ pub struct Scene {
     camera: Camera,
     pixel_width: u32,
     pixel_height: u32,
+    min_point: Vec3d,
+    max_point: Vec3d,
+    radius: f64,
 }
 
 impl Scene {
@@ -156,25 +160,25 @@ impl Scene {
 
     /// @brief Positions spheres in the scene based on the bounding box of the triangles
     pub fn position_spheres(&mut self){
-        let min_point = self.deduce_min_point();
-        let max_point = self.deduce_max_point();
+        self.min_point = self.deduce_min_point();
+        self.max_point = self.deduce_max_point();
         let avg_triangle_area = self.deduce_average_triangle_area();
-        let radius = avg_triangle_area.sqrt();
+        self.radius = avg_triangle_area.sqrt();
 
-        let mut current_point = min_point;
-        while current_point.x <= max_point.x {
-            while current_point.y <= max_point.y {
-                while current_point.z <= max_point.z {
+        let mut current_point = self.min_point;
+        while current_point.x <= self.max_point.x {
+            while current_point.y <= self.max_point.y {
+                while current_point.z <= self.max_point.z {
                     // Here you would add a sphere at current_point with the calculated radius
-                    current_point.z += radius * 2.0; // Move to the next position in z
-                    self.add_sphere(current_point, radius);
+                    current_point.z += self.radius * 2.0; // Move to the next position in z
+                    self.add_sphere(current_point, self.radius);
                 }
-                current_point.y += radius * 2.0; // Move to the next position in y
-                current_point.z = min_point.z; // Reset z to min
+                current_point.y += self.radius * 2.0; // Move to the next position in y
+                current_point.z = self.min_point.z; // Reset z to min
             }
-            current_point.x += radius * 2.0; // Move to the next position in x
-            current_point.y = min_point.y; // Reset y to min
-            current_point.z = min_point.z; // Reset z to min
+            current_point.x += self.radius * 2.0; // Move to the next position in x
+            current_point.y = self.min_point.y; // Reset y to min
+            current_point.z = self.min_point.z; // Reset z to min
         }
 
         for tri in &self.triangles {
@@ -230,5 +234,24 @@ impl Scene {
 
     fn add_sphere(&mut self, center: Vec3d, radius: f64) {
         self.spheres.push(ContainingSphere::new(center, radius));
+    }
+
+    fn get_sphere(&self, point: Vec3d) -> Option<&ContainingSphere> {
+        //check that all three coordinates are within the bounding box
+        if point.x >= self.min_point.x && point.x <= self.max_point.x &&
+           point.y >= self.min_point.y && point.y <= self.max_point.y &&
+           point.z >= self.min_point.z && point.z <= self.max_point.z {
+            // compute the index of the sphere that contains the point
+            let x_coordinate = ((point.x - self.min_point.x) / (self.radius * 2.0)).floor() as usize;
+            let y_coordinate = ((point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
+            let z_coordinate = ((point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
+            let spheres_per_y = ((self.max_point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
+            let spheres_per_z = ((self.max_point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
+            let index = x_coordinate * spheres_per_y * spheres_per_z + y_coordinate * spheres_per_z + z_coordinate;
+            if index < self.spheres.len() {
+                return Some(&self.spheres[index]);
+            }
+        }
+        None
     }
 }
