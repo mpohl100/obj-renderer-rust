@@ -1,5 +1,6 @@
 use rs_math3d::{CrossProduct, Vec3d};
 use rs_math3d::Vector;
+use rs_math3d::FloatVector;
 
 use crate::camera::Camera;
 
@@ -30,9 +31,55 @@ pub fn ray_triangle_intersect(ray: &crate::camera::Ray, vertices: &[rs_math3d::V
 /// @brief Represents a colored triangle in 3D space
 /// @param vertices The three vertices of the triangle
 /// @param color The color of the triangle
+#[derive(Clone)]
 pub struct ColoredTriangle {
     pub vertices: [Vec3d; 3],
     pub color: [f32; 3], // RGB
+}
+
+impl ColoredTriangle {
+    /// @brief Calculates the area of the triangle using the cross product method
+    /// @return Area of the triangle
+    pub fn area(&self) -> f64 {
+        let edge1 = self.vertices[1] - self.vertices[0];
+        let edge2 = self.vertices[2] - self.vertices[0];
+        let cross_product = CrossProduct::cross(&edge1, &edge2);
+        cross_product.length() * 0.5
+    }
+}
+
+struct Sphere{
+    center: Vec3d,
+    radius: f64,
+}
+
+struct ContainingSphere {
+    sphere: Sphere,
+    contained_triangles: Vec<ColoredTriangle>, // Indices of triangles contained within this sphere
+}
+
+impl ContainingSphere {
+    fn new(center: Vec3d, radius: f64) -> Self {
+        ContainingSphere {
+            sphere: Sphere { center, radius },
+            contained_triangles: Vec::new(),
+        }
+    }
+
+    fn contains(&self, triangle: &ColoredTriangle) -> bool {
+        for &v in &triangle.vertices {
+            if (v - self.sphere.center).length() < self.sphere.radius {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn add_triangle(&mut self, triangle: ColoredTriangle) {
+        if self.contains(&triangle) {
+            self.contained_triangles.push(triangle);
+        }
+    }
 }
 
 /// @brief Represents the scene containing triangles
@@ -40,6 +87,7 @@ pub struct ColoredTriangle {
 /// @param coordinate_system The coordinate system (standard cartesian)
 pub struct Scene {
     triangles: Vec<ColoredTriangle>,
+    spheres: Vec<ContainingSphere>,
     camera: Camera,
     pixel_width: u32,
     pixel_height: u32,
@@ -59,6 +107,7 @@ impl Scene {
         );
         Scene {
             triangles: Vec::new(),
+            spheres: Vec::new(),
             camera,
             pixel_width: 800,
             pixel_height: 450,
@@ -105,6 +154,36 @@ impl Scene {
         self.triangles.push(triangle);
     }
 
+    /// @brief Positions spheres in the scene based on the bounding box of the triangles
+    pub fn position_spheres(&mut self){
+        let min_point = self.deduce_min_point();
+        let max_point = self.deduce_max_point();
+        let avg_triangle_area = self.deduce_average_triangle_area();
+        let radius = avg_triangle_area.sqrt();
+
+        let mut current_point = min_point;
+        while current_point.x <= max_point.x {
+            while current_point.y <= max_point.y {
+                while current_point.z <= max_point.z {
+                    // Here you would add a sphere at current_point with the calculated radius
+                    current_point.z += radius * 2.0; // Move to the next position in z
+                    self.add_sphere(current_point, radius);
+                }
+                current_point.y += radius * 2.0; // Move to the next position in y
+                current_point.z = min_point.z; // Reset z to min
+            }
+            current_point.x += radius * 2.0; // Move to the next position in x
+            current_point.y = min_point.y; // Reset y to min
+            current_point.z = min_point.z; // Reset z to min
+        }
+
+        for tri in &self.triangles {
+            for sphere in &mut self.spheres {
+                sphere.add_triangle(tri.clone());
+            }
+        }
+    }
+
     /// @brief Returns a reference to the triangles in the scene
     /// @return Reference to Vec<ColoredTriangle>
     pub fn triangles(&self) -> &Vec<ColoredTriangle> {
@@ -115,5 +194,41 @@ impl Scene {
     /// @return Reference to Camera
     pub fn camera(&self) -> &Camera {
         &self.camera
+    }
+
+    fn deduce_min_point(&self) -> Vec3d {
+        let mut min_point = Vec3d::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+        for tri in &self.triangles {
+            for &v in &tri.vertices {
+                min_point.x = min_point.x.min(v.x);
+                min_point.y = min_point.y.min(v.y);
+                min_point.z = min_point.z.min(v.z);
+            }
+        }
+        min_point
+    }
+
+    fn deduce_max_point(&self) -> Vec3d {
+        let mut max_point = Vec3d::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for tri in &self.triangles {
+            for &v in &tri.vertices {
+                max_point.x = max_point.x.max(v.x);
+                max_point.y = max_point.y.max(v.y);
+                max_point.z = max_point.z.max(v.z);
+            }
+        }
+        max_point
+    }
+
+    fn deduce_average_triangle_area(&self) -> f64 {
+        let mut total_area = 0.0;
+        for tri in &self.triangles {
+            total_area += tri.area();
+        }
+        total_area / self.triangles.len() as f64
+    }
+
+    fn add_sphere(&mut self, center: Vec3d, radius: f64) {
+        self.spheres.push(ContainingSphere::new(center, radius));
     }
 }
