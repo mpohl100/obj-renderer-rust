@@ -83,6 +83,13 @@ impl ContainingSphere {
     }
 }
 
+pub struct Tile {
+    pub start_x: u32,
+    pub end_x: u32,
+    pub start_y: u32,
+    pub end_y: u32,
+}
+
 /// @brief Represents the scene containing triangles
 /// @param triangles The triangles in the scene
 /// @param coordinate_system The coordinate system (standard cartesian)
@@ -115,6 +122,9 @@ impl Scene {
             camera,
             pixel_width: 800,
             pixel_height: 450,
+            min_point: Vec3d::new(0.0, 0.0, 0.0),
+            max_point: Vec3d::new(0.0, 0.0, 0.0),
+            radius: 1.0,
         }
     }
     /// @brief Renders the scene to a bitmap by brute-force ray-triangle intersection
@@ -198,6 +208,81 @@ impl Scene {
     /// @return Reference to Camera
     pub fn camera(&self) -> &Camera {
         &self.camera
+    }
+
+    pub fn deduce_pixel_colors_fast(&self, tile: Tile) -> Vec<[f32; 3]> {
+        let mut colors = Vec::new();
+        let all_eight_corners_of_min_max_point = [
+            Vec3d::new(self.min_point.x, self.min_point.y, self.min_point.z),
+            Vec3d::new(self.min_point.x, self.min_point.y, self.max_point.z),
+            Vec3d::new(self.min_point.x, self.max_point.y, self.min_point.z),
+            Vec3d::new(self.min_point.x, self.max_point.y, self.max_point.z),
+            Vec3d::new(self.max_point.x, self.min_point.y, self.min_point.z),
+            Vec3d::new(self.max_point.x, self.min_point.y, self.max_point.z),
+            Vec3d::new(self.max_point.x, self.max_point.y, self.min_point.z),
+            Vec3d::new(self.max_point.x, self.max_point.y, self.max_point.z),
+        ];
+        for y in tile.start_y..tile.end_y {
+            for x in tile.start_x..tile.end_x {
+                let u = (x as f32 + 0.5) / self.pixel_width as f32;
+                let v = (y as f32 + 0.5) / self.pixel_height as f32;
+                let ray = self.camera.generate_ray(u, v);
+                let mut hit_color = None;
+                let mut min_dist = f64::INFINITY;
+                let all_eight_distances = all_eight_corners_of_min_max_point.iter()
+                    .map(|corner| (corner - ray.origin).length())
+                    .collect::<Vec<f64>>();
+
+                let current_point = ray.origin;
+                while hit_color.is_none() {
+                    let sphere = match self.get_sphere(current_point) {
+                        Some(s) => s,
+                        None => _
+                    };
+                    for tri in &sphere.contained_triangles {
+                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                            if dist < min_dist {
+                                min_dist = dist;
+                                hit_color = Some(tri.color);
+                            }
+                        }
+                    }
+                    if (hit_color.is_some()) {
+                        break;
+                    }
+                    // check that if the current point is beyond the max distance to the bounding box corners
+                    let current_distance = (current_point - ray.origin).length();
+                    if all_eight_distances.iter().all(|&d| current_distance > d) {
+                        break;
+                    }
+
+                    current_point = current_point + ray.direction * (self.radius * 2.0);
+                }
+
+                if let Some(hit_color) = hit_color {
+                    colors.push(hit_color);
+                } else {
+                    colors.push([0.0, 0.0, 0.0]);
+                }
+            }
+        }
+        colors
+    }
+
+                    for tri in &sphere.contained_triangles {
+                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                            if dist < min_dist {
+                                min_dist = dist;
+                                hit_color = tri.color;
+                            }
+                        }
+                    }
+                }
+
+                colors.push(hit_color);
+            }
+        }
+        colors
     }
 
     fn deduce_min_point(&self) -> Vec3d {
