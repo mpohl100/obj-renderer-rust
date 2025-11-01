@@ -1,7 +1,7 @@
 use clap::Error;
-use rs_math3d::{CrossProduct, Vec3d};
-use rs_math3d::Vector;
 use rs_math3d::FloatVector;
+use rs_math3d::Vector;
+use rs_math3d::{CrossProduct, Vec3d};
 
 use crate::camera::Camera;
 
@@ -9,7 +9,10 @@ use crate::camera::Camera;
 /// @param ray The ray
 /// @param vertices The triangle vertices
 /// @return Some(distance) if hit, None otherwise
-pub fn ray_triangle_intersect(ray: &crate::camera::Ray, vertices: &[rs_math3d::Vec3d; 3]) -> Option<f64> {
+pub fn ray_triangle_intersect(
+    ray: &crate::camera::Ray,
+    vertices: &[rs_math3d::Vec3d; 3],
+) -> Option<f64> {
     let v0 = vertices[0];
     let v1 = vertices[1];
     let v2 = vertices[2];
@@ -17,16 +20,26 @@ pub fn ray_triangle_intersect(ray: &crate::camera::Ray, vertices: &[rs_math3d::V
     let edge2 = v2 - v0;
     let h = CrossProduct::cross(&ray.direction, &edge2);
     let a = Vec3d::dot(&edge1, &h);
-    if a.abs() < 1e-6 { return None; }
+    if a.abs() < 1e-6 {
+        return None;
+    }
     let f = 1.0 / a;
     let s = ray.origin - v0;
     let u = f * rs_math3d::Vec3d::dot(&s, &h);
-    if u < 0.0 || u > 1.0 { return None; }
+    if u < 0.0 || u > 1.0 {
+        return None;
+    }
     let q = rs_math3d::Vec3d::cross(&s, &edge1);
     let v = f * rs_math3d::Vec3d::dot(&ray.direction, &q);
-    if v < 0.0 || u + v > 1.0 { return None; }
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
     let t = f * rs_math3d::Vec3d::dot(&edge2, &q);
-    if t > 1e-6 { Some(t) } else { None }
+    if t > 1e-6 {
+        Some(t)
+    } else {
+        None
+    }
 }
 
 /// @brief Represents a colored triangle in 3D space
@@ -49,7 +62,7 @@ impl ColoredTriangle {
     }
 }
 
-struct Sphere{
+struct Sphere {
     center: Vec3d,
     radius: f64,
 }
@@ -110,11 +123,11 @@ impl Scene {
     pub fn new() -> Self {
         let camera = Camera::new(
             Vec3d::new(0.0, 0.0, 5.0), // position
-            Vec3d::new(0.0, 1.0, 0.0),   // up
-            60.0,                        // fov
-            16.0/9.0,                    // aspect ratio
-            0.1,                         // near
-            100.0                        // far
+            Vec3d::new(0.0, 1.0, 0.0), // up
+            60.0,                      // fov
+            16.0 / 9.0,                // aspect ratio
+            0.1,                       // near
+            100.0,                     // far
         );
         Scene {
             triangles: Vec::new(),
@@ -131,7 +144,7 @@ impl Scene {
     /// @param filename Output file name for the bitmap
     /// @return None
     pub fn take_picture(&self, filename: &str) {
-        use image::{RgbImage, Rgb};
+        use image::{Rgb, RgbImage};
         let mut img = RgbImage::new(self.pixel_width, self.pixel_height);
         for y in 0..self.pixel_height {
             for x in 0..self.pixel_width {
@@ -169,7 +182,7 @@ impl Scene {
     }
 
     /// @brief Positions spheres in the scene based on the bounding box of the triangles
-    pub fn position_spheres(&mut self){
+    pub fn position_spheres(&mut self) {
         self.min_point = self.deduce_min_point();
         self.max_point = self.deduce_max_point();
         let avg_triangle_area = self.deduce_average_triangle_area();
@@ -222,6 +235,8 @@ impl Scene {
             Vec3d::new(self.max_point.x, self.max_point.y, self.min_point.z),
             Vec3d::new(self.max_point.x, self.max_point.y, self.max_point.z),
         ];
+        let mut cached_sphere: Option<&ContainingSphere> = None;
+        let mut cached_distance = None;
         for y in tile.start_y..tile.end_y {
             for x in tile.start_x..tile.end_x {
                 let u = (x as f32 + 0.5) / self.pixel_width as f32;
@@ -229,15 +244,56 @@ impl Scene {
                 let ray = self.camera.generate_ray(u, v);
                 let mut hit_color = None;
                 let mut min_dist = f64::INFINITY;
-                let all_eight_distances = all_eight_corners_of_min_max_point.iter()
-                    .map(|corner| (corner - ray.origin).length())
+                let all_eight_distances = all_eight_corners_of_min_max_point
+                    .iter()
+                    .map(|corner| (*corner - ray.origin).length())
                     .collect::<Vec<f64>>();
 
-                let current_point = ray.origin;
+                // probe whether we hit the same sphere as last time
+                let is_same_sphere = match &cached_sphere {
+                    Some(sphere) => {
+                        let point_in_sphere =
+                            ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
+                        let sphere_at_point = self.get_sphere(point_in_sphere);
+                        match sphere_at_point {
+                            Some(s) => {
+                                let cached = cached_sphere.as_ref().unwrap();
+                                // check that the two centers are close enough to a certain min distance
+                                (s.sphere.center - cached.sphere.center).length() < 1e-6
+                            },
+                            None => false,
+                        }
+                    }
+                    None => false,
+                };
+
+                if is_same_sphere {
+                    let sphere = cached_sphere.as_ref().unwrap();
+                    for tri in &sphere.contained_triangles {
+                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                            if dist < min_dist {
+                                min_dist = dist;
+                                hit_color = Some(tri.color);
+                            }
+                        }
+                    }
+                    if let Some(hit_color) = hit_color {
+                        colors.push(hit_color);
+                        continue;
+                    } else {
+                        colors.push([0.0, 0.0, 0.0]);
+                        continue;
+                    }
+                }
+
+                let mut current_point = ray.origin;
                 while hit_color.is_none() {
                     let sphere = match self.get_sphere(current_point) {
                         Some(s) => s,
-                        None => _
+                        None => {
+                            current_point = current_point + ray.direction * (self.radius * 2.0);
+                            continue;
+                        }
                     };
                     for tri in &sphere.contained_triangles {
                         if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
@@ -247,12 +303,17 @@ impl Scene {
                             }
                         }
                     }
+
+                    let current_distance = (current_point - ray.origin).length();
                     if (hit_color.is_some()) {
+                        cached_sphere = Some(sphere);
+                        cached_distance = Some(current_distance);
                         break;
                     }
                     // check that if the current point is beyond the max distance to the bounding box corners
-                    let current_distance = (current_point - ray.origin).length();
                     if all_eight_distances.iter().all(|&d| current_distance > d) {
+                        cached_sphere = None;
+                        cached_distance = Some(current_distance);
                         break;
                     }
 
@@ -264,22 +325,6 @@ impl Scene {
                 } else {
                     colors.push([0.0, 0.0, 0.0]);
                 }
-            }
-        }
-        colors
-    }
-
-                    for tri in &sphere.contained_triangles {
-                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                            if dist < min_dist {
-                                min_dist = dist;
-                                hit_color = tri.color;
-                            }
-                        }
-                    }
-                }
-
-                colors.push(hit_color);
             }
         }
         colors
@@ -323,16 +368,27 @@ impl Scene {
 
     fn get_sphere(&self, point: Vec3d) -> Option<&ContainingSphere> {
         //check that all three coordinates are within the bounding box
-        if point.x >= self.min_point.x && point.x <= self.max_point.x &&
-           point.y >= self.min_point.y && point.y <= self.max_point.y &&
-           point.z >= self.min_point.z && point.z <= self.max_point.z {
+        if point.x >= self.min_point.x
+            && point.x <= self.max_point.x
+            && point.y >= self.min_point.y
+            && point.y <= self.max_point.y
+            && point.z >= self.min_point.z
+            && point.z <= self.max_point.z
+        {
             // compute the index of the sphere that contains the point
-            let x_coordinate = ((point.x - self.min_point.x) / (self.radius * 2.0)).floor() as usize;
-            let y_coordinate = ((point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
-            let z_coordinate = ((point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
-            let spheres_per_y = ((self.max_point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
-            let spheres_per_z = ((self.max_point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
-            let index = x_coordinate * spheres_per_y * spheres_per_z + y_coordinate * spheres_per_z + z_coordinate;
+            let x_coordinate =
+                ((point.x - self.min_point.x) / (self.radius * 2.0)).floor() as usize;
+            let y_coordinate =
+                ((point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
+            let z_coordinate =
+                ((point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
+            let spheres_per_y =
+                ((self.max_point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
+            let spheres_per_z =
+                ((self.max_point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
+            let index = x_coordinate * spheres_per_y * spheres_per_z
+                + y_coordinate * spheres_per_z
+                + z_coordinate;
             if index < self.spheres.len() {
                 return Some(&self.spheres[index]);
             }
