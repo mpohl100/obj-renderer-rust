@@ -67,6 +67,7 @@ impl Camera {
 /// @brief Represents a ray in 3D space
 /// @param origin The origin of the ray
 /// @param direction The direction of the ray (normalized)
+#[derive(Clone)]
 pub struct Ray {
     pub origin: Vec3d,
     pub direction: Vec3d,

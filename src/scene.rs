@@ -4,6 +4,7 @@ use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
 
 use crate::camera::Camera;
+use crate::camera::Ray;
 
 /// @brief Checks intersection of a ray with a triangle using Möller–Trumbore algorithm
 /// @param ray The ray
@@ -269,14 +270,7 @@ impl Scene {
 
                 if is_same_sphere {
                     let sphere = cached_sphere.as_ref().unwrap();
-                    for tri in &sphere.contained_triangles {
-                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                            if dist < min_dist {
-                                min_dist = dist;
-                                hit_color = Some(tri.color);
-                            }
-                        }
-                    }
+                    let hit_color = self.deduce_hit_color(ray, sphere);
                     if let Some(hit_color) = hit_color {
                         colors.push(hit_color);
                         continue;
@@ -295,17 +289,10 @@ impl Scene {
                             continue;
                         }
                     };
-                    for tri in &sphere.contained_triangles {
-                        if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                            if dist < min_dist {
-                                min_dist = dist;
-                                hit_color = Some(tri.color);
-                            }
-                        }
-                    }
+                    let hit_color = self.deduce_hit_color(ray.clone(), sphere);
 
                     let current_distance = (current_point - ray.origin).length();
-                    if (hit_color.is_some()) {
+                    if hit_color.is_some() {
                         cached_sphere = Some(sphere);
                         cached_distance = Some(current_distance);
                         break;
@@ -328,6 +315,20 @@ impl Scene {
             }
         }
         colors
+    }
+
+    fn deduce_hit_color(&self, ray: Ray, containing_sphere: &ContainingSphere) -> Option<[f32; 3]> {
+        let mut hit_color = None;
+        let mut min_dist = f64::INFINITY;
+        for tri in &containing_sphere.contained_triangles {
+            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                if dist < min_dist {
+                    min_dist = dist;
+                    hit_color = Some(tri.color);
+                }
+            }
+        }
+        hit_color
     }
 
     fn deduce_min_point(&self) -> Vec3d {

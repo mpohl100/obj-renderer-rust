@@ -108,6 +108,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    scene.position_spheres();
+
     println!("Loaded scene with {} triangles.", scene.triangles().len());
     Ok(())
 }
