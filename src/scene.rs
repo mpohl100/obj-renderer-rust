@@ -3,6 +3,8 @@ use rs_math3d::FloatVector;
 use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
 
+use std::sync::Arc;
+
 use crate::camera::Camera;
 use crate::camera::Ray;
 
@@ -97,6 +99,25 @@ impl ContainingSphere {
     }
 }
 
+#[derive(Clone)]
+struct WrappedContainingSphere {
+    sphere: Arc<ContainingSphere>,
+}
+
+impl WrappedContainingSphere {
+    fn new(sphere: ContainingSphere) -> Self {
+        WrappedContainingSphere { sphere: Arc::new(sphere) }
+    }
+
+    fn contains(&self, triangle: &ColoredTriangle) -> bool {
+        self.sphere.contains(triangle) 
+    }
+
+    fn add_triangle(&self, triangle: ColoredTriangle) {
+        Arc::get_mut(&mut self.sphere.clone()).unwrap().add_triangle(triangle);
+    }
+}
+
 pub struct Tile {
     pub start_x: u32,
     pub end_x: u32,
@@ -109,7 +130,7 @@ pub struct Tile {
 /// @param coordinate_system The coordinate system (standard cartesian)
 pub struct Scene {
     triangles: Vec<ColoredTriangle>,
-    spheres: Vec<ContainingSphere>,
+    spheres: Vec<WrappedContainingSphere>,
     camera: Camera,
     pixel_width: u32,
     pixel_height: u32,
@@ -236,7 +257,7 @@ impl Scene {
             Vec3d::new(self.max_point.x, self.max_point.y, self.min_point.z),
             Vec3d::new(self.max_point.x, self.max_point.y, self.max_point.z),
         ];
-        let mut cached_sphere: Option<&ContainingSphere> = None;
+        let mut cached_sphere: Option<WrappedContainingSphere> = None;
         let mut cached_distance = None;
         for y in tile.start_y..tile.end_y {
             for x in tile.start_x..tile.end_x {
@@ -260,7 +281,7 @@ impl Scene {
                             Some(s) => {
                                 let cached = cached_sphere.as_ref().unwrap();
                                 // check that the two centers are close enough to a certain min distance
-                                (s.sphere.center - cached.sphere.center).length() < 1e-6
+                                (s.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
                             },
                             None => false,
                         }
@@ -289,7 +310,7 @@ impl Scene {
                             continue;
                         }
                     };
-                    let hit_color = self.deduce_hit_color(ray.clone(), sphere);
+                    let hit_color = self.deduce_hit_color(ray.clone(), &sphere);
 
                     let current_distance = (current_point - ray.origin).length();
                     if hit_color.is_some() {
@@ -317,10 +338,10 @@ impl Scene {
         colors
     }
 
-    fn deduce_hit_color(&self, ray: Ray, containing_sphere: &ContainingSphere) -> Option<[f32; 3]> {
+    fn deduce_hit_color(&self, ray: Ray, containing_sphere: &WrappedContainingSphere) -> Option<[f32; 3]> {
         let mut hit_color = None;
         let mut min_dist = f64::INFINITY;
-        for tri in &containing_sphere.contained_triangles {
+        for tri in &containing_sphere.sphere.contained_triangles {
             if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
                 if dist < min_dist {
                     min_dist = dist;
@@ -364,10 +385,10 @@ impl Scene {
     }
 
     fn add_sphere(&mut self, center: Vec3d, radius: f64) {
-        self.spheres.push(ContainingSphere::new(center, radius));
+        self.spheres.push(WrappedContainingSphere::new(ContainingSphere::new(center, radius)));
     }
 
-    fn get_sphere(&self, point: Vec3d) -> Option<&ContainingSphere> {
+    fn get_sphere(&self, point: Vec3d) -> Option<WrappedContainingSphere> {
         //check that all three coordinates are within the bounding box
         if point.x >= self.min_point.x
             && point.x <= self.max_point.x
@@ -391,7 +412,7 @@ impl Scene {
                 + y_coordinate * spheres_per_z
                 + z_coordinate;
             if index < self.spheres.len() {
-                return Some(&self.spheres[index]);
+                return Some(self.spheres[index].clone());
             }
         }
         None
