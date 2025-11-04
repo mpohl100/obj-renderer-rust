@@ -285,7 +285,9 @@ impl Scene {
 
                         let cached = sphere;
                         // check that the two centers are close enough to a certain min distance
-                        (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
+                        (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center)
+                            .length()
+                            < 1e-6
                     }
                     None => false,
                 };
@@ -306,6 +308,13 @@ impl Scene {
                 while hit_color.is_none() {
                     let sphere = self.get_sphere(current_point);
                     if sphere.sphere.contained_triangles.is_empty() {
+                        let current_distance = (current_point - ray.origin).length();
+                        // check that if the current point is beyond the max distance to the bounding box corners
+                        if all_eight_distances.iter().all(|&d| current_distance > d) {
+                            cached_sphere = None;
+                            cached_distance = Some(current_distance);
+                            break;
+                        }
                         current_point = current_point + ray.direction * (self.radius * 2.0);
                         continue;
                     };
