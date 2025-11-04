@@ -122,6 +122,7 @@ impl WrappedContainingSphere {
     }
 }
 
+#[derive(Clone)]
 pub struct Tile {
     pub start_x: u32,
     pub end_x: u32,
@@ -172,30 +173,33 @@ impl Scene {
     pub fn take_picture(&self, filename: &str) {
         use image::{Rgb, RgbImage};
         let mut img = RgbImage::new(self.pixel_width, self.pixel_height);
-        for y in 0..self.pixel_height {
-            for x in 0..self.pixel_width {
-                // Compute normalized device coordinates
-                let u = (x as f32 + 0.5) / self.pixel_width as f32;
-                let v = (y as f32 + 0.5) / self.pixel_height as f32;
-                // Generate ray from camera through pixel
-                let ray = self.camera.generate_ray(u, v);
-                // Brute-force intersection
-                let mut hit_color = [0.0, 0.0, 0.0];
-                let mut min_dist = f64::INFINITY;
-                for tri in &self.triangles {
-                    if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                        if dist < min_dist {
-                            min_dist = dist;
-                            hit_color = tri.color;
-                        }
-                    }
+        
+        let tiles = self.deduce_tiles(2, 2);
+        let all_colors = tiles.iter().map(|tile| {
+            let colors = self.deduce_pixel_colors_fast(tile.clone());
+            let mut index = 0;
+            let mut color_results = Vec::new();
+            for y in tile.start_y..tile.end_y {
+                for x in tile.start_x..tile.end_x {
+                    let hit_color = colors[index];
+                    index += 1;
+                    let rgb = Rgb([
+                        (hit_color[0] * 255.0) as u8,
+                        (hit_color[1] * 255.0) as u8,
+                        (hit_color[2] * 255.0) as u8,
+                    ]);
+                    color_results.push(rgb);
                 }
-                let rgb = Rgb([
-                    (hit_color[0] * 255.0) as u8,
-                    (hit_color[1] * 255.0) as u8,
-                    (hit_color[2] * 255.0) as u8,
-                ]);
-                img.put_pixel(x, y, rgb);
+            }
+            color_results
+        }).collect::<Vec<_>>();
+        for (tile, color_results) in tiles.iter().zip(all_colors.iter()) {
+            let mut index = 0;
+            for y in tile.start_y..tile.end_y {
+                for x in tile.start_x..tile.end_x {
+                    img.put_pixel(x, y, color_results[index]);
+                    index += 1;
+                }
             }
         }
         img.save(filename).expect("Failed to save image");
@@ -345,6 +349,36 @@ impl Scene {
             }
         }
         colors
+    }
+
+    fn deduce_tiles(&self, tiles_x: u32, tiles_y: u32) -> Vec<Tile> {
+        let mut tiles = Vec::new();
+        let tile_width = self.pixel_width / tiles_x;
+        let tile_height = self.pixel_height / tiles_y;
+
+        for ty in 0..tiles_y {
+            for tx in 0..tiles_x {
+                let start_x = tx * tile_width;
+                let end_x = if tx == tiles_x - 1 {
+                    self.pixel_width
+                } else {
+                    (tx + 1) * tile_width
+                };
+                let start_y = ty * tile_height;
+                let end_y = if ty == tiles_y - 1 {
+                    self.pixel_height
+                } else {
+                    (ty + 1) * tile_height
+                };
+                tiles.push(Tile {
+                    start_x,
+                    end_x,
+                    start_y,
+                    end_y,
+                });
+            }
+        }
+        tiles
     }
 
     fn deduce_hit_color(
