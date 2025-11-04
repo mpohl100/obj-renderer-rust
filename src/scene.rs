@@ -106,15 +106,19 @@ struct WrappedContainingSphere {
 
 impl WrappedContainingSphere {
     fn new(sphere: ContainingSphere) -> Self {
-        WrappedContainingSphere { sphere: Arc::new(sphere) }
+        WrappedContainingSphere {
+            sphere: Arc::new(sphere),
+        }
     }
 
     fn contains(&self, triangle: &ColoredTriangle) -> bool {
-        self.sphere.contains(triangle) 
+        self.sphere.contains(triangle)
     }
 
     fn add_triangle(&self, triangle: ColoredTriangle) {
-        Arc::get_mut(&mut self.sphere.clone()).unwrap().add_triangle(triangle);
+        Arc::get_mut(&mut self.sphere.clone())
+            .unwrap()
+            .add_triangle(triangle);
     }
 }
 
@@ -209,6 +213,7 @@ impl Scene {
         self.max_point = self.deduce_max_point();
         let avg_triangle_area = self.deduce_average_triangle_area();
         self.radius = avg_triangle_area.sqrt();
+        let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
 
         let mut current_point = self.min_point;
         while current_point.x <= self.max_point.x {
@@ -216,7 +221,7 @@ impl Scene {
                 while current_point.z <= self.max_point.z {
                     // Here you would add a sphere at current_point with the calculated radius
                     current_point.z += self.radius * 2.0; // Move to the next position in z
-                    self.add_sphere(current_point, self.radius);
+                    self.add_sphere(current_point, radius_times_sqrt_3); // Slightly larger radius to ensure coverage
                 }
                 current_point.y += self.radius * 2.0; // Move to the next position in y
                 current_point.z = self.min_point.z; // Reset z to min
@@ -277,14 +282,10 @@ impl Scene {
                         let point_in_sphere =
                             ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
                         let sphere_at_point = self.get_sphere(point_in_sphere);
-                        match sphere_at_point {
-                            Some(s) => {
-                                let cached = cached_sphere.as_ref().unwrap();
-                                // check that the two centers are close enough to a certain min distance
-                                (s.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
-                            },
-                            None => false,
-                        }
+
+                        let cached = sphere;
+                        // check that the two centers are close enough to a certain min distance
+                        (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
                     }
                     None => false,
                 };
@@ -303,13 +304,12 @@ impl Scene {
 
                 let mut current_point = ray.origin;
                 while hit_color.is_none() {
-                    let sphere = match self.get_sphere(current_point) {
-                        Some(s) => s,
-                        None => {
-                            current_point = current_point + ray.direction * (self.radius * 2.0);
-                            continue;
-                        }
+                    let sphere = self.get_sphere(current_point);
+                    if sphere.sphere.contained_triangles.is_empty() {
+                        current_point = current_point + ray.direction * (self.radius * 2.0);
+                        continue;
                     };
+
                     let hit_color = self.deduce_hit_color(ray.clone(), &sphere);
 
                     let current_distance = (current_point - ray.origin).length();
@@ -338,7 +338,11 @@ impl Scene {
         colors
     }
 
-    fn deduce_hit_color(&self, ray: Ray, containing_sphere: &WrappedContainingSphere) -> Option<[f32; 3]> {
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere,
+    ) -> Option<[f32; 3]> {
         let mut hit_color = None;
         let mut min_dist = f64::INFINITY;
         for tri in &containing_sphere.sphere.contained_triangles {
@@ -385,36 +389,45 @@ impl Scene {
     }
 
     fn add_sphere(&mut self, center: Vec3d, radius: f64) {
-        self.spheres.push(WrappedContainingSphere::new(ContainingSphere::new(center, radius)));
+        self.spheres
+            .push(WrappedContainingSphere::new(ContainingSphere::new(
+                center, radius,
+            )));
     }
 
-    fn get_sphere(&self, point: Vec3d) -> Option<WrappedContainingSphere> {
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere {
         //check that all three coordinates are within the bounding box
-        if point.x >= self.min_point.x
-            && point.x <= self.max_point.x
-            && point.y >= self.min_point.y
-            && point.y <= self.max_point.y
-            && point.z >= self.min_point.z
-            && point.z <= self.max_point.z
+        // the minpoint is the self.min_point minus self.radius in each direction
+        let min_point = self.min_point - Vec3d::new(self.radius, self.radius, self.radius);
+        let max_point = self.max_point + Vec3d::new(self.radius, self.radius, self.radius);
+        // compute the index of the sphere that contains the point
+        let x_coordinate = ((point.x - min_point.x) / (self.radius * 2.0)).floor() as usize;
+        let y_coordinate = ((point.y - min_point.y) / (self.radius * 2.0)).floor() as usize;
+        let z_coordinate = ((point.z - min_point.z) / (self.radius * 2.0)).floor() as usize;
+        let spheres_per_y = ((max_point.y - min_point.y) / (self.radius * 2.0)).floor() as usize;
+        let spheres_per_z = ((max_point.z - min_point.z) / (self.radius * 2.0)).floor() as usize;
+        let index = x_coordinate * spheres_per_y * spheres_per_z
+            + y_coordinate * spheres_per_z
+            + z_coordinate;
+        if point.x >= min_point.x
+            && point.x <= max_point.x
+            && point.y >= min_point.y
+            && point.y <= max_point.y
+            && point.z >= min_point.z
+            && point.z <= max_point.z
         {
-            // compute the index of the sphere that contains the point
-            let x_coordinate =
-                ((point.x - self.min_point.x) / (self.radius * 2.0)).floor() as usize;
-            let y_coordinate =
-                ((point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
-            let z_coordinate =
-                ((point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
-            let spheres_per_y =
-                ((self.max_point.y - self.min_point.y) / (self.radius * 2.0)).floor() as usize;
-            let spheres_per_z =
-                ((self.max_point.z - self.min_point.z) / (self.radius * 2.0)).floor() as usize;
-            let index = x_coordinate * spheres_per_y * spheres_per_z
-                + y_coordinate * spheres_per_z
-                + z_coordinate;
             if index < self.spheres.len() {
-                return Some(self.spheres[index].clone());
+                return self.spheres[index].clone();
             }
         }
-        None
+
+        // calculate the center of the sphere at the point
+        let center = Vec3d::new(
+            min_point.x + (x_coordinate as f64 + 0.5) * self.radius * 2.0,
+            min_point.y + (y_coordinate as f64 + 0.5) * self.radius * 2.0,
+            min_point.z + (z_coordinate as f64 + 0.5) * self.radius * 2.0,
+        );
+        let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
+        return WrappedContainingSphere::new(ContainingSphere::new(center, radius_times_sqrt_3));
     }
 }
