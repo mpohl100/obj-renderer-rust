@@ -1,9 +1,10 @@
 mod camera;
 mod scene;
-use scene::{ColoredTriangle, Scene};
+mod coordinate_system;
+use scene::{ColoredTriangle, Scene, Object3D};
 
 use clap::Parser;
-use wavefront_obj::obj::{parse, ObjSet};
+use wavefront_obj::obj::{Object, parse};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -91,7 +92,8 @@ fn triangulate(polygon: &[Vec3d]) -> Vec<[Vec3d; 3]> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let dome = parse(args.obj_file).expect("Failed to parse OBJ file");
-    let mut scene = Scene::new();
+
+    let mut obj = Object3D::new();
 
     // parse all the polygons of the dome
     for object in dome.objects {
@@ -101,15 +103,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let triangles = triangulate(&polygon);
         for tri in triangles {
-            scene.add_colored_triangle(ColoredTriangle {
+            obj.add_colored_triangle(ColoredTriangle {
                 vertices: tri,
                 color: [0.8, 0.8, 0.8], // gray color for now
             });
         }
     }
 
-    scene.position_spheres();
 
-    println!("Loaded scene with {} triangles.", scene.triangles().len());
+    obj.position_spheres();
+    let scene = Scene::new(obj);
+    println!("Loaded scene with {} triangles.", scene.object().triangles().len());
     Ok(())
 }
