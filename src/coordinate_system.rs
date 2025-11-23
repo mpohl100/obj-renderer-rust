@@ -4,6 +4,7 @@ use rs_math3d::{Vec3d, Vector, FloatVector};
 ///
 /// Stores an origin and three basis axes. Basis axes are not required to
 /// be orthonormal on construction; methods will normalize as needed.
+#[derive(Clone)]
 pub struct CoordinateSystem3D {
     origin: Vec3d,
     x_axis: Vec3d,
@@ -51,5 +52,26 @@ impl CoordinateSystem3D {
     /// @brief Get the world-space origin of this coordinate system
     pub fn origin(&self) -> &Vec3d {
         &self.origin
+    }
+}
+
+pub struct SphericalCoordinates {
+    pub radius: f64,
+    pub theta: f64,
+    pub phi: f64,
+}
+
+impl SphericalCoordinates {
+    /// @brief Create new spherical coordinates
+    pub fn new(radius: f64, theta: f64, phi: f64) -> Self {
+        SphericalCoordinates { radius, theta, phi }
+    }
+
+    /// @brief Convert spherical coordinates to Cartesian coordinates
+    pub fn to_cartesian(&self) -> Vec3d {
+        let x = self.radius * self.theta.sin() * self.phi.cos();
+        let y = self.radius * self.theta.sin() * self.phi.sin();
+        let z = self.radius * self.theta.cos();
+        Vec3d::new(x, y, z)
     }
 }

@@ -1,6 +1,8 @@
 mod camera;
 mod scene;
 mod coordinate_system;
+mod camera_position_optimizer;
+mod linear_optimizer;
 use scene::{ColoredTriangle, Scene, Object3D};
 
 use clap::Parser;
