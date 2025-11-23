@@ -132,6 +132,7 @@ pub struct Tile {
     pub end_y: u32,
 }
 
+#[derive(Clone)]
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
     spheres: Vec<WrappedContainingSphere>,
@@ -157,6 +158,30 @@ impl Object3D {
 
     pub fn triangles(&self) -> &Vec<ColoredTriangle> {
         &self.triangles
+    }
+
+    pub fn center(&self) -> Vec3d {
+        (self.min_point + self.max_point) * 0.5
+    }
+
+    pub fn bounding_sphere_radius(&self) -> f64 {
+        let center = self.center();
+        let mut max_distance = 0.0;
+        for tri in &self.triangles {
+            for &v in &tri.vertices {
+                let distance = (v - center).length();
+                if distance > max_distance {
+                    max_distance = distance;
+                }
+            }
+        }
+        max_distance
+    }
+
+    pub fn bounding_box_radius(&self) -> f64 {
+        let center = self.center();
+        let distance = (self.max_point - center).length();
+        distance
     }
 
     /// @brief Adds a colored triangle to the object 3D

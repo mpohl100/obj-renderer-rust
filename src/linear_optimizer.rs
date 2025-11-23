@@ -1,30 +1,32 @@
-pub trait Objective {
-    fn new(x: f64) -> Self where Self: Sized;
+pub trait Objective where Self: Sized + Clone {
+    fn adjust(self, x: f64) -> Self where Self: Sized;
     /// @brief Evaluates the objective function
     fn evaluate(&self) -> f64;
 }
 
 pub struct LinearOptimizer<Obj: Objective> {
     marker: std::marker::PhantomData<Obj>,
+    obj: Obj
 }
 
 impl<Obj: Objective> LinearOptimizer<Obj> {
-    pub fn new() -> Self {
+    pub fn new(obj: Obj) -> Self {
         LinearOptimizer{
             marker: std::marker::PhantomData,
+            obj,
         }
     }
 
-    pub fn optimize(left_x: f64, right_x: f64, target: f64) -> Obj {
-        let left_objective = Obj::new(left_x);
-        let right_objective = Obj::new(right_x);
+    pub fn optimize(&self, left_x: f64, right_x: f64, target: f64) -> Obj {
+        let left_objective = Obj::adjust(self.obj.clone(), left_x);
+        let right_objective = Obj::adjust(self.obj.clone(), right_x);
         let left_eval = left_objective.evaluate();
         let right_eval = right_objective.evaluate();   
         let (start_x, start_step) = self.initialize_search(left_x, right_x, target, left_eval, right_eval); 
         let mut current_x = start_x;
         let mut step = start_step;
         loop {
-            let current_objective = Obj::new(current_x);
+            let current_objective = Obj::adjust(self.obj.clone(),current_x);
             let current_eval = current_objective.evaluate();
             if (current_eval - target).abs() < 1e-6 {
                 return current_objective;
