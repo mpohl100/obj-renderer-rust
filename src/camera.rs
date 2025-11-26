@@ -10,6 +10,7 @@ use rs_math3d::CrossProduct;
 /// @param aspect_ratio Aspect ratio of the image
 /// @param near Near clipping plane
 /// @param far Far clipping plane
+#[derive(Clone)]
 pub struct Camera {
     pub position: Vec3d,
     pub look_at: Vec3d,
@@ -23,16 +24,17 @@ pub struct Camera {
 impl Camera {
     /// @brief Creates a new camera oriented to look at the origin
     /// @param position Camera position
+    /// @param look_at Look-at point
     /// @param up Up direction
     /// @param fov Field of view
     /// @param aspect_ratio Aspect ratio
     /// @param near Near plane
     /// @param far Far plane
     /// @return Camera
-    pub fn new(position: Vec3d, up: Vec3d, fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Self {
+    pub fn new(position: Vec3d, look_at: Vec3d, up: Vec3d, fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Self {
         Camera {
             position,
-            look_at: Vec3d::new(0.0, 0.0, 0.0),
+            look_at,
             up,
             fov,
             aspect_ratio,
@@ -61,6 +63,13 @@ impl Camera {
             origin: self.position,
             direction: dir,
         }
+    }
+
+
+    /// @brief Calculates the distance between the camera's focal point and the image plane
+    pub fn distance_between_focal_point_and_image_plane(&self) -> f64 {
+        let focal_length = 1.0 / ( (self.fov.to_radians() / 2.0).tan() as f64 );
+        focal_length
     }
 }
 
