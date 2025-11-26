@@ -315,6 +315,7 @@ impl Scene {
     pub fn new(obj: Object3D) -> Self {
         let camera = Camera::new(
             Vec3d::new(0.0, 0.0, 5.0), // position
+            Vec3d::new(0.0, 0.0, 0.0), // look_at
             Vec3d::new(0.0, 1.0, 0.0), // up
             60.0,                      // fov
             16.0 / 9.0,                // aspect ratio
