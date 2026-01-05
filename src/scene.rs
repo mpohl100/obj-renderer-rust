@@ -184,6 +184,10 @@ impl Object3D {
         distance
     }
 
+    pub fn bounding_box(&self) -> (Vec3d, Vec3d) {
+        (self.min_point, self.max_point)
+    }
+
     /// @brief Adds a colored triangle to the object 3D
     /// @param triangle The ColoredTriangle to add
     pub fn add_colored_triangle(&mut self, triangle: ColoredTriangle) {

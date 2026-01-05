@@ -1,4 +1,6 @@
 use rs_math3d::{Vec3d, Vector, FloatVector};
+use rs_math3d::Vector3;
+use rs_math3d::CrossProduct;
 
 /// @brief A right-handed 3D Cartesian coordinate system
 ///
@@ -21,6 +23,12 @@ impl CoordinateSystem3D {
     /// @return CoordinateSystem3D
     pub fn new(origin: Vec3d, x_axis: Vec3d, y_axis: Vec3d, z_axis: Vec3d) -> Self {
         CoordinateSystem3D { origin, x_axis, y_axis, z_axis }
+    }
+
+    pub fn new_from_axes(origin: Vec3d, x_axis: Vec3d, y_axis: Vec3d) -> Self {
+        let z_axis = Vector3::<f64>::cross(&x_axis, &y_axis).normalize();
+        let y_axis_corrected = Vector3::<f64>::cross(&z_axis, &x_axis).normalize();
+        CoordinateSystem3D { origin, x_axis: x_axis.normalize(), y_axis: y_axis_corrected, z_axis }
     }
 
     /// @brief Create the standard Cartesian coordinate system at world origin

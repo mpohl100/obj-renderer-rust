@@ -71,6 +71,11 @@ impl Camera {
         let focal_length = 1.0 / ( (self.fov.to_radians() / 2.0).tan() as f64 );
         focal_length
     }
+
+    /// @brief Returns the focal point of the camera
+    pub fn focal_point(&self) -> Vec3d {
+        self.look_at
+    }
 }
 
 /// @brief Represents a ray in 3D space
