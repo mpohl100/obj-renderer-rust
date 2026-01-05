@@ -157,6 +157,42 @@ impl Objective for CameraPositionOptimizer {
             direction: (tr_intersection.unwrap() - bl_intersection.unwrap()).normalize(),
         };
 
-        0.0
+        // convert all bbox intersection points to the coordinate system
+        let mut projected_points = Vec::new();
+        for intersection in bbox_intersections {
+            let local_point = coordinate_system.convert_point(&intersection);
+            projected_points.push(local_point);
+        }
+
+        // calculate the projections if the projected points onto the diagonal ray
+        let points_on_diagonal: Vec<f64> = projected_points.iter().map(|p| {
+            Vector3::<f64>::dot(p, &diagonal_ray.direction)
+        }).collect();
+
+        // calculate the t values of the points on the diagonal
+        let t_values: Vec<f64> = points_on_diagonal.iter().map(|p| {
+            let origin_dot = Vector3::<f64>::dot(&diagonal_ray.origin, &diagonal_ray.direction);
+            (*p - origin_dot) / diagonal_ray.direction.length()
+        }).collect();
+
+        // sort the t values
+        let mut sorted_t_values = t_values.clone();
+        sorted_t_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // calculate the t value of the tr_intersection
+        let tr_local = coordinate_system.convert_point(&tr_intersection.unwrap());
+        let tr_point_on_diagonal = Vector3::<f64>::dot(&tr_local, &diagonal_ray.direction);
+        let origin_dot = Vector3::<f64>::dot(&diagonal_ray.origin, &diagonal_ray.direction);
+        let tr_t_value = (tr_point_on_diagonal - origin_dot) / diagonal_ray.direction.length();
+        
+        // return the lowest t_value divided by the tr_t_value
+        let distance = sorted_t_values[0] / tr_t_value;
+        if distance.is_nan() {
+            return f64::MAX;
+        }
+        if distance.is_infinite() {
+            return f64::MAX;
+        }
+        distance
     }
 }
