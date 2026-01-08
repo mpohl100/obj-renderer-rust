@@ -107,12 +107,12 @@ trait HasVertices {
     fn vertices(&self) -> &[Vec3d];
 }
 
-struct ContainingSphere<Shape: HasVertices> {
+struct ContainingSphere<Shape: HasVertices + 'static> {
     sphere: Sphere,
     contained_shapes: Vec<Shape>, // Indices of triangles contained within this sphere
 }
 
-impl<Shape: HasVertices> ContainingSphere<Shape> {
+impl<Shape: HasVertices + 'static> ContainingSphere<Shape> {
     fn new(center: Vec3d, radius: f64) -> Self {
         ContainingSphere {
             sphere: Sphere { center, radius },
@@ -121,8 +121,18 @@ impl<Shape: HasVertices> ContainingSphere<Shape> {
     }
 
     fn contains(&self, shape: &Shape) -> bool {
-        for &v in shape.vertices() {
-            if (v - self.sphere.center).length() < self.sphere.radius {
+        // use this logic if Shape is of type ColoredTriangle
+        if std::any::TypeId::of::<Shape>() == std::any::TypeId::of::<ColoredTriangle>() {
+            let triangle = unsafe { &*(shape as *const Shape as *const ColoredTriangle) };
+            for &vertex in &triangle.vertices {
+                if (vertex - self.sphere.center).length() <= self.sphere.radius {
+                    return true
+                }
+            }
+        } else if std::any::TypeId::of::<Shape>() == std::any::TypeId::of::<ColoredSphere>() {
+            let colored_sphere = unsafe { &*(shape as *const Shape as *const ColoredSphere) };
+            let center_distance = (colored_sphere.sphere.center - self.sphere.center).length();
+            if center_distance + colored_sphere.sphere.radius <= self.sphere.radius {
                 return true;
             }
         }
@@ -137,11 +147,11 @@ impl<Shape: HasVertices> ContainingSphere<Shape> {
 }
 
 #[derive(Clone)]
-struct WrappedContainingSphere<Shape: HasVertices> {
+struct WrappedContainingSphere<Shape: HasVertices + 'static> {
     sphere: Arc<ContainingSphere<Shape>>,
 }
 
-impl<Shape: HasVertices> WrappedContainingSphere<Shape> {
+impl<Shape: HasVertices + 'static> WrappedContainingSphere<Shape> {
     fn new(sphere: ContainingSphere<Shape>) -> Self {
         WrappedContainingSphere {
             sphere: Arc::new(sphere),
@@ -171,14 +181,13 @@ pub struct Tile {
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
     spheres: Vec<WrappedContainingSphere<ColoredTriangle>>,
-    coordinate_system: CoordinateSystem3D, 
+    coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
     radius: f64,
 }
 
 impl Object3D {
-
     /// @brief Creates a new empty Object3D
     pub fn new() -> Self {
         Object3D {
@@ -333,22 +342,20 @@ impl Object3D {
         );
         let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
         return WrappedContainingSphere::new(ContainingSphere::new(center, radius_times_sqrt_3));
-    } 
+    }
 }
 
 #[derive(Clone)]
 pub struct UniverseObject2D {
     balls: Vec<ColoredSphere>,
     spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
-    coordinate_system: CoordinateSystem3D, 
+    coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
     radius: f64,
 }
 
-impl UniverseObject2D {
-    
-}
+impl UniverseObject2D {}
 
 /// @brief Represents the scene containing triangles
 /// @param triangles The triangles in the scene
@@ -393,26 +400,29 @@ impl Scene {
     pub fn take_picture(&self, filename: &str) {
         use image::{Rgb, RgbImage};
         let mut img = RgbImage::new(self.pixel_width, self.pixel_height);
-        
+
         let tiles = self.deduce_tiles(2, 2);
-        let all_colors = tiles.iter().map(|tile| {
-            let colors = self.deduce_pixel_colors_fast(tile.clone());
-            let mut index = 0;
-            let mut color_results = Vec::new();
-            for y in tile.start_y..tile.end_y {
-                for x in tile.start_x..tile.end_x {
-                    let hit_color = colors[index];
-                    index += 1;
-                    let rgb = Rgb([
-                        (hit_color[0] * 255.0) as u8,
-                        (hit_color[1] * 255.0) as u8,
-                        (hit_color[2] * 255.0) as u8,
-                    ]);
-                    color_results.push(rgb);
+        let all_colors = tiles
+            .iter()
+            .map(|tile| {
+                let colors = self.deduce_pixel_colors_fast(tile.clone());
+                let mut index = 0;
+                let mut color_results = Vec::new();
+                for y in tile.start_y..tile.end_y {
+                    for x in tile.start_x..tile.end_x {
+                        let hit_color = colors[index];
+                        index += 1;
+                        let rgb = Rgb([
+                            (hit_color[0] * 255.0) as u8,
+                            (hit_color[1] * 255.0) as u8,
+                            (hit_color[2] * 255.0) as u8,
+                        ]);
+                        color_results.push(rgb);
+                    }
                 }
-            }
-            color_results
-        }).collect::<Vec<_>>();
+                color_results
+            })
+            .collect::<Vec<_>>();
         for (tile, color_results) in tiles.iter().zip(all_colors.iter()) {
             let mut index = 0;
             for y in tile.start_y..tile.end_y {
