@@ -67,26 +67,61 @@ impl ColoredTriangle {
     }
 }
 
+impl HasVertices for ColoredTriangle {
+    fn vertices(&self) -> &[Vec3d] {
+        &self.vertices
+    }
+}
+
+#[derive(Clone)]
 struct Sphere {
     center: Vec3d,
     radius: f64,
 }
 
-struct ContainingSphere {
-    sphere: Sphere,
-    contained_triangles: Vec<ColoredTriangle>, // Indices of triangles contained within this sphere
+#[derive(Clone)]
+struct ColoredSphere {
+    pub sphere: Sphere,
+    pub color: [f32; 3], // RGB
 }
 
-impl ContainingSphere {
+impl ColoredSphere {
+    pub fn new(center: Vec3d, radius: f64, color: [f32; 3]) -> Self {
+        ColoredSphere {
+            sphere: Sphere { center, radius },
+            color,
+        }
+    }
+}
+
+impl HasVertices for ColoredSphere {
+    fn vertices(&self) -> &[Vec3d] {
+        // A sphere does not have vertices in the same way a triangle does.
+        // For the purpose of this trait, we can return an empty slice or
+        // perhaps the center as a single "vertex".
+        std::slice::from_ref(&self.sphere.center)
+    }
+}
+
+trait HasVertices {
+    fn vertices(&self) -> &[Vec3d];
+}
+
+struct ContainingSphere<Shape: HasVertices> {
+    sphere: Sphere,
+    contained_shapes: Vec<Shape>, // Indices of triangles contained within this sphere
+}
+
+impl<Shape: HasVertices> ContainingSphere<Shape> {
     fn new(center: Vec3d, radius: f64) -> Self {
         ContainingSphere {
             sphere: Sphere { center, radius },
-            contained_triangles: Vec::new(),
+            contained_shapes: Vec::new(),
         }
     }
 
-    fn contains(&self, triangle: &ColoredTriangle) -> bool {
-        for &v in &triangle.vertices {
+    fn contains(&self, shape: &Shape) -> bool {
+        for &v in shape.vertices() {
             if (v - self.sphere.center).length() < self.sphere.radius {
                 return true;
             }
@@ -94,33 +129,33 @@ impl ContainingSphere {
         false
     }
 
-    fn add_triangle(&mut self, triangle: ColoredTriangle) {
-        if self.contains(&triangle) {
-            self.contained_triangles.push(triangle);
+    fn add_shape(&mut self, shape: Shape) {
+        if self.contains(&shape) {
+            self.contained_shapes.push(shape);
         }
     }
 }
 
 #[derive(Clone)]
-struct WrappedContainingSphere {
-    sphere: Arc<ContainingSphere>,
+struct WrappedContainingSphere<Shape: HasVertices> {
+    sphere: Arc<ContainingSphere<Shape>>,
 }
 
-impl WrappedContainingSphere {
-    fn new(sphere: ContainingSphere) -> Self {
+impl<Shape: HasVertices> WrappedContainingSphere<Shape> {
+    fn new(sphere: ContainingSphere<Shape>) -> Self {
         WrappedContainingSphere {
             sphere: Arc::new(sphere),
         }
     }
 
-    fn contains(&self, triangle: &ColoredTriangle) -> bool {
-        self.sphere.contains(triangle)
+    fn contains(&self, shape: &Shape) -> bool {
+        self.sphere.contains(shape)
     }
 
-    fn add_triangle(&self, triangle: ColoredTriangle) {
+    fn add_shape(&self, shape: Shape) {
         Arc::get_mut(&mut self.sphere.clone())
             .unwrap()
-            .add_triangle(triangle);
+            .add_shape(shape);
     }
 }
 
@@ -135,7 +170,7 @@ pub struct Tile {
 #[derive(Clone)]
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
-    spheres: Vec<WrappedContainingSphere>,
+    spheres: Vec<WrappedContainingSphere<ColoredTriangle>>,
     coordinate_system: CoordinateSystem3D, 
     min_point: Vec3d,
     max_point: Vec3d,
@@ -220,7 +255,7 @@ impl Object3D {
 
         for tri in &self.triangles {
             for sphere in &mut self.spheres {
-                sphere.add_triangle(tri.clone());
+                sphere.add_shape(tri.clone());
             }
         }
     }
@@ -264,7 +299,7 @@ impl Object3D {
             )));
     }
 
-    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere {
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredTriangle> {
         //check that all three coordinates are within the bounding box
         // the minpoint is the self.min_point minus self.radius in each direction
         let min_point = self.min_point - Vec3d::new(self.radius, self.radius, self.radius);
@@ -301,6 +336,19 @@ impl Object3D {
     } 
 }
 
+#[derive(Clone)]
+pub struct UniverseObject2D {
+    balls: Vec<ColoredSphere>,
+    spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
+    coordinate_system: CoordinateSystem3D, 
+    min_point: Vec3d,
+    max_point: Vec3d,
+    radius: f64,
+}
+
+impl UniverseObject2D {
+    
+}
 
 /// @brief Represents the scene containing triangles
 /// @param triangles The triangles in the scene
@@ -397,7 +445,7 @@ impl Scene {
             Vec3d::new(max_point.x, max_point.y, min_point.z),
             Vec3d::new(max_point.x, max_point.y, max_point.z),
         ];
-        let mut cached_sphere: Option<WrappedContainingSphere> = None;
+        let mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>> = None;
         let mut cached_distance = None;
         for y in tile.start_y..tile.end_y {
             for x in tile.start_x..tile.end_x {
@@ -442,7 +490,7 @@ impl Scene {
                 let mut current_point = ray.origin;
                 while hit_color.is_none() {
                     let sphere = self.object.get_sphere(current_point);
-                    if sphere.sphere.contained_triangles.is_empty() {
+                    if sphere.sphere.contained_shapes.is_empty() {
                         let current_distance = (current_point - ray.origin).length();
                         // check that if the current point is beyond the max distance to the bounding box corners
                         if all_eight_distances.iter().all(|&d| current_distance > d) {
@@ -515,11 +563,11 @@ impl Scene {
     fn deduce_hit_color(
         &self,
         ray: Ray,
-        containing_sphere: &WrappedContainingSphere,
+        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
     ) -> Option<[f32; 3]> {
         let mut hit_color = None;
         let mut min_dist = f64::INFINITY;
-        for tri in &containing_sphere.sphere.contained_triangles {
+        for tri in &containing_sphere.sphere.contained_shapes {
             if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
                 if dist < min_dist {
                     min_dist = dist;
