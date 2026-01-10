@@ -4,6 +4,7 @@ use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
 use wavefront_obj::obj;
 
+use core::panic;
 use std::sync::Arc;
 
 use crate::camera::Camera;
@@ -346,8 +347,45 @@ impl Object3D {
 }
 
 #[derive(Clone)]
-pub struct UniverseObject2D {
+struct BallLine {
     balls: Vec<ColoredSphere>,
+    center_x: f64,
+    center_y: f64,
+    spacing: f64,
+}
+
+impl BallLine {
+    fn new(num_balls: usize, center_x: f64, center_y: f64) -> Self {
+        let mut balls = Vec::new();
+        let spacing = 2.0;
+        for i in 0..num_balls {
+            let center = Vec3d::new(
+                center_x + (i as f64 - (num_balls as f64 - 1.0) / 2.0) * spacing,
+                center_y,
+                0.0,
+            );
+            let radius = 0.5;
+            let color = [
+                0.5,
+                0.5,
+                0.5,
+            ];
+            balls.push(ColoredSphere::new(center, radius, color));
+        }
+        BallLine {
+            balls,
+            center_x,
+            center_y,
+            spacing,
+        }
+    }
+}
+
+
+
+#[derive(Clone)]
+pub struct UniverseObject2D {
+    balls: Vec<BallLine>,
     spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
     coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
@@ -355,7 +393,92 @@ pub struct UniverseObject2D {
     radius: f64,
 }
 
-impl UniverseObject2D {}
+impl UniverseObject2D {
+    fn new(num_balls_x: usize, num_balls_y: usize) -> Self {
+        let mut balls = Vec::new();
+
+        // vec_1 is (0.5, sqrt(3)/2.0, 0.0)
+        let vec_1 = Vec3d::new(0.5, (3.0 as f64).sqrt() / 2.0, 0.0);
+        // vec_2 is (-0.5, sqrt(3)/2.0, 0.0)
+        let vec_2 = Vec3d::new(-0.5, (3.0 as f64).sqrt() / 2.0, 0.0);
+        for i in 0..num_balls_y {
+            let center = Vec3d::new(0.0, 0.0, 0.0);
+            let num_1 = i / 2 + i % 2;
+            let num_2 = i / 2;
+            let offset = vec_1 * (num_1 as f64) + vec_2 * (num_2 as f64);
+            let new_center = center + offset;
+            let ball_line = BallLine::new(num_balls_x, new_center.x, new_center.y);
+            balls.push(ball_line);  
+        }
+        let mut obj = UniverseObject2D {
+            balls,
+            spheres: Vec::new(),
+            coordinate_system: CoordinateSystem3D::standard(),
+            min_point: Vec3d::new(0.0, 0.0, 0.0),
+            max_point: Vec3d::new(0.0, 0.0, 0.0),
+            radius: 0.0,
+        };
+        obj.deduce_bounding_box_and_position_spheres();
+        obj
+    }
+
+    fn deduce_bounding_box_and_position_spheres(&mut self) {
+        self.radius = 2.0_f64.sqrt();
+        for ball_line in &self.balls {
+            for ball in &ball_line.balls {
+                let min_point = ball.sphere.center - Vec3d::new(ball.sphere.radius, ball.sphere.radius, ball.sphere.radius);
+                let max_point = ball.sphere.center + Vec3d::new(ball.sphere.radius, ball.sphere.radius, ball.sphere.radius);
+                self.min_point.x = self.min_point.x.min(min_point.x);
+                self.min_point.y = self.min_point.y.min(min_point.y);
+                self.min_point.z = self.min_point.z.min(min_point.z);
+                self.max_point.x = self.max_point.x.max(max_point.x);
+                self.max_point.y = self.max_point.y.max(max_point.y);
+                self.max_point.z = self.max_point.z.max(max_point.z);
+            }
+        }
+
+        // add containing spheres with the radius of offset
+        let mut current_point = self.min_point;
+        while current_point.x <= self.max_point.x {
+            while current_point.y <= self.max_point.y {
+                while current_point.z <= self.max_point.z {
+                    self.spheres.push(WrappedContainingSphere::new(ContainingSphere::new(   
+                        current_point,
+                        self.radius,
+                    )));
+                    current_point.z += self.radius * 2.0;
+                }
+                current_point.y += self.radius * 2.0;
+            }
+            current_point.x += self.radius * 2.0;
+        }
+
+        // add the balls to the containing spheres
+        for ball_line in &self.balls {
+            for ball in &ball_line.balls {
+                let point = ball.sphere.center;
+                let containing_sphere = self.get_sphere(point);
+                containing_sphere.add_shape(ball.clone());
+            }
+        }
+    }
+
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredSphere> {
+        let diameter = self.radius * 2.0;
+        let index_x = ((point.x - self.min_point.x) / diameter).floor() as usize;
+        let index_y = ((point.y - self.min_point.y) / diameter).floor() as usize;
+        let index_z = ((point.z - self.min_point.z) / diameter).floor() as usize;
+        let spheres_per_y = ((self.max_point.y - self.min_point.y) / diameter).floor() as usize;
+        let spheres_per_z = ((self.max_point.z - self.min_point.z) / diameter).floor() as usize;
+        let index = index_x * spheres_per_y * spheres_per_z
+            + index_y * spheres_per_z
+            + index_z;
+        if index < self.spheres.len() {
+            return self.spheres[index].clone();
+        }
+        panic!("No containing sphere found for point {:?}", point);
+    }
+}
 
 /// @brief Represents the scene containing triangles
 /// @param triangles The triangles in the scene
