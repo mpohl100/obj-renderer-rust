@@ -179,13 +179,13 @@ pub struct Tile {
     pub end_y: u32,
 }
 
-trait ObjectLike {
+trait ObjectLike<Shape: HasVertices + 'static> {
     fn radius(&self) -> f64;
-    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredTriangle>;
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<Shape>;
     fn deduce_hit_color(
         &self,
         ray: Ray,
-        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
+        containing_sphere: &WrappedContainingSphere<Shape>,
     ) -> Option<[f32; 3]>;
     fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8];
 }
@@ -223,7 +223,7 @@ impl Object3D {
         Option<WrappedContainingSphere<ColoredTriangle>>,
         Option<f64>,
     ) {
-        let intersector = RayIntersector::<Object3D>::new();
+        let intersector = RayIntersector::<ColoredTriangle, Object3D>::new();
         intersector.deduce_pixel_color_fast(self, ray, cached_sphere, cached_distance)
     }
 
@@ -340,7 +340,7 @@ impl Object3D {
     }
 }
 
-impl ObjectLike for Object3D {
+impl ObjectLike<ColoredTriangle> for Object3D {
     fn radius(&self) -> f64 {
         self.radius
     }
@@ -528,6 +528,12 @@ impl UniverseObject2D {
             }
         }
     }
+}
+
+impl ObjectLike<ColoredSphere> for UniverseObject2D {
+    fn radius(&self) -> f64 {
+        self.radius
+    }
 
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredSphere> {
         let diameter = self.radius * 2.0;
@@ -542,16 +548,60 @@ impl UniverseObject2D {
         }
         panic!("No containing sphere found for point {:?}", point);
     }
+
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere<ColoredSphere>,
+    ) -> Option<[f32; 3]> {
+        let mut hit_color = None;
+        let mut min_dist = f64::INFINITY;
+        for ball in &containing_sphere.sphere.contained_shapes {
+            // Ray-sphere intersection
+            let oc = ray.origin - ball.sphere.center;
+            let a = Vec3d::dot(&ray.direction, &ray.direction);
+            let b = 2.0 * Vec3d::dot(&oc, &ray.direction);
+            let c = Vec3d::dot(&oc, &oc) - ball.sphere.radius * ball.sphere.radius;
+            let discriminant = b * b - 4.0 * a * c;
+            if discriminant > 0.0 {
+                let t1 = (-b - discriminant.sqrt()) / (2.0 * a);
+                let t2 = (-b + discriminant.sqrt()) / (2.0 * a);
+                let t = if t1 > 1e-6 { t1 } else { t2 };
+                if t > 1e-6 && t < min_dist {
+                    min_dist = t;
+                    hit_color = Some(ball.color);
+                }
+            }
+        }
+        hit_color
+    }
+
+    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
+        let min_point = self.min_point;
+        let max_point = self.max_point;
+        [
+            Vec3d::new(min_point.x, min_point.y, min_point.z),
+            Vec3d::new(min_point.x, min_point.y, max_point.z),
+            Vec3d::new(min_point.x, max_point.y, min_point.z),
+            Vec3d::new(min_point.x, max_point.y, max_point.z),
+            Vec3d::new(max_point.x, min_point.y, min_point.z),
+            Vec3d::new(max_point.x, min_point.y, max_point.z),
+            Vec3d::new(max_point.x, max_point.y, min_point.z),
+            Vec3d::new(max_point.x, max_point.y, max_point.z),
+        ]
+    }
 }
 
-struct RayIntersector<O: ObjectLike> {
+struct RayIntersector<Shape: HasVertices + 'static, O: ObjectLike<Shape>> {
     _marker: std::marker::PhantomData<O>,
+    _shape_marker: std::marker::PhantomData<Shape>,
 }
 
-impl<O: ObjectLike> RayIntersector<O> {
+impl<Shape: HasVertices + 'static, O: ObjectLike<Shape>> RayIntersector<Shape, O> {
     fn new() -> Self {
         RayIntersector {
             _marker: std::marker::PhantomData,
+            _shape_marker: std::marker::PhantomData,
         }
     }
 
@@ -559,11 +609,11 @@ impl<O: ObjectLike> RayIntersector<O> {
         &self,
         object: &O,
         ray: Ray,
-        mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
+        mut cached_sphere: Option<WrappedContainingSphere<Shape>>,
         mut cached_distance: Option<f64>,
     ) -> (
         [f32; 3],
-        Option<WrappedContainingSphere<ColoredTriangle>>,
+        Option<WrappedContainingSphere<Shape>>,
         Option<f64>,
     ) {
         let hit_color = None;
