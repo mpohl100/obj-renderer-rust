@@ -109,12 +109,12 @@ trait HasVertices {
     fn vertices(&self) -> &[Vec3d];
 }
 
-struct ContainingSphere<Shape: HasVertices + 'static> {
+struct ContainingSphere<Shape: HasVertices + Clone + 'static> {
     sphere: Sphere,
     contained_shapes: Vec<Shape>, // Indices of triangles contained within this sphere
 }
 
-impl<Shape: HasVertices + 'static> ContainingSphere<Shape> {
+impl<Shape: HasVertices + Clone + 'static> ContainingSphere<Shape> {
     fn new(center: Vec3d, radius: f64) -> Self {
         ContainingSphere {
             sphere: Sphere { center, radius },
@@ -149,11 +149,11 @@ impl<Shape: HasVertices + 'static> ContainingSphere<Shape> {
 }
 
 #[derive(Clone)]
-struct WrappedContainingSphere<Shape: HasVertices + 'static> {
+struct WrappedContainingSphere<Shape: HasVertices + Clone + 'static> {
     sphere: Arc<ContainingSphere<Shape>>,
 }
 
-impl<Shape: HasVertices + 'static> WrappedContainingSphere<Shape> {
+impl<Shape: HasVertices + Clone + 'static> WrappedContainingSphere<Shape> {
     fn new(sphere: ContainingSphere<Shape>) -> Self {
         WrappedContainingSphere {
             sphere: Arc::new(sphere),
@@ -179,7 +179,7 @@ pub struct Tile {
     pub end_y: u32,
 }
 
-trait ObjectLike<Shape: HasVertices + 'static> {
+trait ObjectLike<Shape: HasVertices + Clone + 'static> {
     fn radius(&self) -> f64;
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<Shape>;
     fn deduce_hit_color(
@@ -592,12 +592,12 @@ impl ObjectLike<ColoredSphere> for UniverseObject2D {
     }
 }
 
-struct RayIntersector<Shape: HasVertices + 'static, O: ObjectLike<Shape>> {
+struct RayIntersector<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> {
     _marker: std::marker::PhantomData<O>,
     _shape_marker: std::marker::PhantomData<Shape>,
 }
 
-impl<Shape: HasVertices + 'static, O: ObjectLike<Shape>> RayIntersector<Shape, O> {
+impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> RayIntersector<Shape, O> {
     fn new() -> Self {
         RayIntersector {
             _marker: std::marker::PhantomData,
@@ -689,18 +689,19 @@ impl<Shape: HasVertices + 'static, O: ObjectLike<Shape>> RayIntersector<Shape, O
 /// @brief Represents the scene containing triangles
 /// @param triangles The triangles in the scene
 /// @param coordinate_system The coordinate system (standard cartesian)
-pub struct Scene {
-    object: Object3D,
+pub struct Scene<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> {
+    _shape_marker: std::marker::PhantomData<Shape>,
+    object: O,
     coordinate_system: CoordinateSystem3D,
     camera: Camera,
     pixel_width: u32,
     pixel_height: u32,
 }
 
-impl Scene {
+impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O> {
     /// @brief Creates a new scene with the standard cartesian coordinate system and a camera looking at the origin
     /// @return Scene
-    pub fn new(obj: Object3D) -> Self {
+    pub fn new(obj: O) -> Self {
         let camera = Camera::new(
             Vec3d::new(0.0, 0.0, 5.0), // position
             Vec3d::new(0.0, 0.0, 0.0), // look_at
@@ -711,6 +712,7 @@ impl Scene {
             100.0,                     // far
         );
         Scene {
+            _shape_marker: std::marker::PhantomData,
             object: obj,
             camera,
             coordinate_system: CoordinateSystem3D::standard(),
@@ -719,7 +721,7 @@ impl Scene {
         }
     }
 
-    pub fn object(&self) -> &Object3D {
+    pub fn object(&self) -> &O {
         &self.object
     }
 
@@ -772,16 +774,21 @@ impl Scene {
 
     pub fn deduce_pixel_colors_fast(&self, tile: Tile) -> Vec<[f32; 3]> {
         let mut colors = Vec::new();
-        let mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>> = None;
+        let mut cached_sphere: Option<WrappedContainingSphere<Shape>> = None;
         let mut cached_distance = None;
         for y in tile.start_y..tile.end_y {
             for x in tile.start_x..tile.end_x {
                 let u = (x as f32 + 0.5) / self.pixel_width as f32;
                 let v = (y as f32 + 0.5) / self.pixel_height as f32;
                 let ray = self.camera.generate_ray(u, v);
-                let (color, new_cached_sphere, new_cached_distance) = self
-                    .object
-                    .deduce_pixel_color_fast(ray, cached_sphere.clone(), cached_distance.clone());
+                let ray_intersector = RayIntersector::<Shape, O>::new();
+                let (color, new_cached_sphere, new_cached_distance) = ray_intersector
+                    .deduce_pixel_color_fast(
+                        &self.object,
+                        ray,
+                        cached_sphere.clone(),
+                        cached_distance.clone(),
+                    );
                 cached_sphere = new_cached_sphere;
                 cached_distance = new_cached_distance;
                 colors.push(color);
