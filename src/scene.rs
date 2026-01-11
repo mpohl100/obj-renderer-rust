@@ -213,20 +213,6 @@ impl Object3D {
         }
     }
 
-    pub fn deduce_pixel_color_fast(
-        &self,
-        ray: Ray,
-        mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
-        mut cached_distance: Option<f64>,
-    ) -> (
-        [f32; 3],
-        Option<WrappedContainingSphere<ColoredTriangle>>,
-        Option<f64>,
-    ) {
-        let intersector = RayIntersector::<ColoredTriangle, Object3D>::new();
-        intersector.deduce_pixel_color_fast(self, ray, cached_sphere, cached_distance)
-    }
-
     pub fn radius(&self) -> f64 {
         self.radius
     }
