@@ -201,6 +201,86 @@ impl Object3D {
         }
     }
 
+    pub fn deduce_pixel_color_fast(
+        &self,
+        ray: Ray,
+        mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
+        mut cached_distance: Option<f64>,
+    ) -> (
+        [f32; 3],
+        Option<WrappedContainingSphere<ColoredTriangle>>,
+        Option<f64>,
+    ) {
+        let hit_color = None;
+        let all_eight_distances = self
+            .get_all_eight_corners_of_min_max_point()
+            .iter()
+            .map(|corner| (*corner - ray.origin).length())
+            .collect::<Vec<f64>>();
+
+        // probe whether we hit the same sphere as last time
+        let is_same_sphere = match &cached_sphere {
+            Some(sphere) => {
+                let point_in_sphere = ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
+                let sphere_at_point = self.get_sphere(point_in_sphere);
+
+                let cached = sphere;
+                // check that the two centers are close enough to a certain min distance
+                (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
+            }
+            None => false,
+        };
+
+        if is_same_sphere {
+            let sphere = cached_sphere.as_ref().unwrap();
+            let hit_color = self.deduce_hit_color(ray, sphere);
+            if let Some(hit_color) = hit_color {
+                return (hit_color, cached_sphere, cached_distance);
+            } else {
+                return ([0.0, 0.0, 0.0], cached_sphere, cached_distance);
+            }
+        }
+
+        let mut current_point = ray.origin;
+        while hit_color.is_none() {
+            let sphere = self.get_sphere(current_point);
+            if sphere.sphere.contained_shapes.is_empty() {
+                let current_distance = (current_point - ray.origin).length();
+                // check that if the current point is beyond the max distance to the bounding box corners
+                if all_eight_distances.iter().all(|&d| current_distance > d) {
+                    cached_sphere = None;
+                    cached_distance = Some(current_distance);
+                    break;
+                }
+                current_point = current_point + ray.direction * (self.radius * 2.0);
+                continue;
+            };
+
+            let hit_color = self.deduce_hit_color(ray.clone(), &sphere);
+
+            let current_distance = (current_point - ray.origin).length();
+            if hit_color.is_some() {
+                cached_sphere = Some(sphere);
+                cached_distance = Some(current_distance);
+                break;
+            }
+            // check that if the current point is beyond the max distance to the bounding box corners
+            if all_eight_distances.iter().all(|&d| current_distance > d) {
+                cached_sphere = None;
+                cached_distance = Some(current_distance);
+                break;
+            }
+
+            current_point = current_point + ray.direction * (self.radius * 2.0);
+        }
+
+        if let Some(hit_color) = hit_color {
+            (hit_color, cached_sphere, cached_distance)
+        } else {
+            ([0.0, 0.0, 0.0], cached_sphere, cached_distance)
+        }
+    }
+
     pub fn triangles(&self) -> &Vec<ColoredTriangle> {
         &self.triangles
     }
@@ -268,6 +348,39 @@ impl Object3D {
                 sphere.add_shape(tri.clone());
             }
         }
+    }
+
+    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
+        let min_point = self.min_point;
+        let max_point = self.max_point;
+        [
+            Vec3d::new(min_point.x, min_point.y, min_point.z),
+            Vec3d::new(min_point.x, min_point.y, max_point.z),
+            Vec3d::new(min_point.x, max_point.y, min_point.z),
+            Vec3d::new(min_point.x, max_point.y, max_point.z),
+            Vec3d::new(max_point.x, min_point.y, min_point.z),
+            Vec3d::new(max_point.x, min_point.y, max_point.z),
+            Vec3d::new(max_point.x, max_point.y, min_point.z),
+            Vec3d::new(max_point.x, max_point.y, max_point.z),
+        ]
+    }
+
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
+    ) -> Option<[f32; 3]> {
+        let mut hit_color = None;
+        let mut min_dist = f64::INFINITY;
+        for tri in &containing_sphere.sphere.contained_shapes {
+            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                if dist < min_dist {
+                    min_dist = dist;
+                    hit_color = Some(tri.color);
+                }
+            }
+        }
+        hit_color
     }
 
     fn deduce_min_point(&self) -> Vec3d {
@@ -568,104 +681,15 @@ impl Scene {
                 let u = (x as f32 + 0.5) / self.pixel_width as f32;
                 let v = (y as f32 + 0.5) / self.pixel_height as f32;
                 let ray = self.camera.generate_ray(u, v);
-                let (color, new_cached_sphere, new_cached_distance) = self.deduce_pixel_color_fast(ray, cached_sphere.clone(), cached_distance.clone());
+                let (color, new_cached_sphere, new_cached_distance) = self
+                    .object
+                    .deduce_pixel_color_fast(ray, cached_sphere.clone(), cached_distance.clone());
                 cached_sphere = new_cached_sphere;
                 cached_distance = new_cached_distance;
                 colors.push(color);
             }
         }
         colors
-    }
-
-    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
-        let min_point = self.object.min_point;
-        let max_point = self.object.max_point;
-        [
-            Vec3d::new(min_point.x, min_point.y, min_point.z),
-            Vec3d::new(min_point.x, min_point.y, max_point.z),
-            Vec3d::new(min_point.x, max_point.y, min_point.z),
-            Vec3d::new(min_point.x, max_point.y, max_point.z),
-            Vec3d::new(max_point.x, min_point.y, min_point.z),
-            Vec3d::new(max_point.x, min_point.y, max_point.z),
-            Vec3d::new(max_point.x, max_point.y, min_point.z),
-            Vec3d::new(max_point.x, max_point.y, max_point.z),
-        ]
-    }
-
-    fn deduce_pixel_color_fast(
-        &self,
-        ray: Ray,
-        mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
-        mut cached_distance: Option<f64>,
-    ) -> ([f32; 3], Option<WrappedContainingSphere<ColoredTriangle>>, Option<f64>) {
-        let hit_color = None;
-        let all_eight_distances = self
-            .get_all_eight_corners_of_min_max_point()
-            .iter()
-            .map(|corner| (*corner - ray.origin).length())
-            .collect::<Vec<f64>>();
-
-        // probe whether we hit the same sphere as last time
-        let is_same_sphere = match &cached_sphere {
-            Some(sphere) => {
-                let point_in_sphere = ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
-                let sphere_at_point = self.object.get_sphere(point_in_sphere);
-
-                let cached = sphere;
-                // check that the two centers are close enough to a certain min distance
-                (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
-            }
-            None => false,
-        };
-
-        if is_same_sphere {
-            let sphere = cached_sphere.as_ref().unwrap();
-            let hit_color = self.deduce_hit_color(ray, sphere);
-            if let Some(hit_color) = hit_color {
-                return (hit_color, cached_sphere, cached_distance);
-            } else {
-                return ([0.0, 0.0, 0.0], cached_sphere, cached_distance);
-            }
-        }
-
-        let mut current_point = ray.origin;
-        while hit_color.is_none() {
-            let sphere = self.object.get_sphere(current_point);
-            if sphere.sphere.contained_shapes.is_empty() {
-                let current_distance = (current_point - ray.origin).length();
-                // check that if the current point is beyond the max distance to the bounding box corners
-                if all_eight_distances.iter().all(|&d| current_distance > d) {
-                    cached_sphere = None;
-                    cached_distance = Some(current_distance);
-                    break;
-                }
-                current_point = current_point + ray.direction * (self.object.radius * 2.0);
-                continue;
-            };
-
-            let hit_color = self.deduce_hit_color(ray.clone(), &sphere);
-
-            let current_distance = (current_point - ray.origin).length();
-            if hit_color.is_some() {
-                cached_sphere = Some(sphere);
-                cached_distance = Some(current_distance);
-                break;
-            }
-            // check that if the current point is beyond the max distance to the bounding box corners
-            if all_eight_distances.iter().all(|&d| current_distance > d) {
-                cached_sphere = None;
-                cached_distance = Some(current_distance);
-                break;
-            }
-
-            current_point = current_point + ray.direction * (self.object.radius * 2.0);
-        }
-
-        if let Some(hit_color) = hit_color {
-            (hit_color, cached_sphere, cached_distance)
-        } else {
-            ([0.0, 0.0, 0.0], cached_sphere, cached_distance)
-        }
     }
 
     fn deduce_tiles(&self, tiles_x: u32, tiles_y: u32) -> Vec<Tile> {
@@ -696,23 +720,5 @@ impl Scene {
             }
         }
         tiles
-    }
-
-    fn deduce_hit_color(
-        &self,
-        ray: Ray,
-        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
-    ) -> Option<[f32; 3]> {
-        let mut hit_color = None;
-        let mut min_dist = f64::INFINITY;
-        for tri in &containing_sphere.sphere.contained_shapes {
-            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                if dist < min_dist {
-                    min_dist = dist;
-                    hit_color = Some(tri.color);
-                }
-            }
-        }
-        hit_color
     }
 }
