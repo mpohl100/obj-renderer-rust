@@ -211,74 +211,17 @@ impl Object3D {
         Option<WrappedContainingSphere<ColoredTriangle>>,
         Option<f64>,
     ) {
-        let hit_color = None;
-        let all_eight_distances = self
-            .get_all_eight_corners_of_min_max_point()
-            .iter()
-            .map(|corner| (*corner - ray.origin).length())
-            .collect::<Vec<f64>>();
+        let intersector = RayIntersector::new();
+        intersector.deduce_pixel_color_fast(
+            self,
+            ray,
+            cached_sphere,
+            cached_distance,
+        )
+    }
 
-        // probe whether we hit the same sphere as last time
-        let is_same_sphere = match &cached_sphere {
-            Some(sphere) => {
-                let point_in_sphere = ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
-                let sphere_at_point = self.get_sphere(point_in_sphere);
-
-                let cached = sphere;
-                // check that the two centers are close enough to a certain min distance
-                (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
-            }
-            None => false,
-        };
-
-        if is_same_sphere {
-            let sphere = cached_sphere.as_ref().unwrap();
-            let hit_color = self.deduce_hit_color(ray, sphere);
-            if let Some(hit_color) = hit_color {
-                return (hit_color, cached_sphere, cached_distance);
-            } else {
-                return ([0.0, 0.0, 0.0], cached_sphere, cached_distance);
-            }
-        }
-
-        let mut current_point = ray.origin;
-        while hit_color.is_none() {
-            let sphere = self.get_sphere(current_point);
-            if sphere.sphere.contained_shapes.is_empty() {
-                let current_distance = (current_point - ray.origin).length();
-                // check that if the current point is beyond the max distance to the bounding box corners
-                if all_eight_distances.iter().all(|&d| current_distance > d) {
-                    cached_sphere = None;
-                    cached_distance = Some(current_distance);
-                    break;
-                }
-                current_point = current_point + ray.direction * (self.radius * 2.0);
-                continue;
-            };
-
-            let hit_color = self.deduce_hit_color(ray.clone(), &sphere);
-
-            let current_distance = (current_point - ray.origin).length();
-            if hit_color.is_some() {
-                cached_sphere = Some(sphere);
-                cached_distance = Some(current_distance);
-                break;
-            }
-            // check that if the current point is beyond the max distance to the bounding box corners
-            if all_eight_distances.iter().all(|&d| current_distance > d) {
-                cached_sphere = None;
-                cached_distance = Some(current_distance);
-                break;
-            }
-
-            current_point = current_point + ray.direction * (self.radius * 2.0);
-        }
-
-        if let Some(hit_color) = hit_color {
-            (hit_color, cached_sphere, cached_distance)
-        } else {
-            ([0.0, 0.0, 0.0], cached_sphere, cached_distance)
-        }
+    pub fn radius(&self) -> f64 {
+        self.radius
     }
 
     pub fn triangles(&self) -> &Vec<ColoredTriangle> {
@@ -585,6 +528,94 @@ impl UniverseObject2D {
             return self.spheres[index].clone();
         }
         panic!("No containing sphere found for point {:?}", point);
+    }
+}
+
+struct RayIntersector {}
+
+impl RayIntersector {
+    fn new() -> Self {
+        RayIntersector {}
+    }
+
+    pub fn deduce_pixel_color_fast(
+        &self,
+        object: &Object3D,
+        ray: Ray,
+        mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
+        mut cached_distance: Option<f64>,
+    ) -> (
+        [f32; 3],
+        Option<WrappedContainingSphere<ColoredTriangle>>,
+        Option<f64>,
+    ) {
+        let hit_color = None;
+        let all_eight_distances = object
+            .get_all_eight_corners_of_min_max_point()
+            .iter()
+            .map(|corner| (*corner - ray.origin).length())
+            .collect::<Vec<f64>>();
+
+        // probe whether we hit the same sphere as last time
+        let is_same_sphere = match &cached_sphere {
+            Some(sphere) => {
+                let point_in_sphere = ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
+                let sphere_at_point = object.get_sphere(point_in_sphere);
+
+                let cached = sphere;
+                // check that the two centers are close enough to a certain min distance
+                (sphere_at_point.sphere.sphere.center - cached.sphere.sphere.center).length() < 1e-6
+            }
+            None => false,
+        };
+
+        if is_same_sphere {
+            let sphere = cached_sphere.as_ref().unwrap();
+            let hit_color = object.deduce_hit_color(ray, sphere);
+            if let Some(hit_color) = hit_color {
+                return (hit_color, cached_sphere, cached_distance);
+            } else {
+                return ([0.0, 0.0, 0.0], cached_sphere, cached_distance);
+            }
+        }
+
+        let mut current_point = ray.origin;
+        while hit_color.is_none() {
+            let sphere = object.get_sphere(current_point);
+            if sphere.sphere.contained_shapes.is_empty() {
+                let current_distance = (current_point - ray.origin).length();
+                // check that if the current point is beyond the max distance to the bounding box corners
+                if all_eight_distances.iter().all(|&d| current_distance > d) {
+                    cached_sphere = None;
+                    cached_distance = Some(current_distance);
+                    break;
+                }
+                current_point = current_point + ray.direction * (object.radius() * 2.0);
+                continue;
+            };
+
+            let hit_color = object.deduce_hit_color(ray.clone(), &sphere);
+            let current_distance = (current_point - ray.origin).length();
+            if hit_color.is_some() {
+                cached_sphere = Some(sphere);
+                cached_distance = Some(current_distance);
+                break;
+            }
+            // check that if the current point is beyond the max distance to the bounding box corners
+            if all_eight_distances.iter().all(|&d| current_distance > d) {
+                cached_sphere = None;
+                cached_distance = Some(current_distance);
+                break;
+            }
+
+            current_point = current_point + ray.direction * (object.radius() * 2.0);
+        }
+
+        if let Some(hit_color) = hit_color {
+            (hit_color, cached_sphere, cached_distance)
+        } else {
+            ([0.0, 0.0, 0.0], cached_sphere, cached_distance)
+        }
     }
 }
 
