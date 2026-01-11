@@ -3,6 +3,7 @@ use rs_math3d::FloatVector;
 use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
 use wavefront_obj::obj;
+use wavefront_obj::obj::Object;
 
 use core::panic;
 use std::sync::Arc;
@@ -178,6 +179,17 @@ pub struct Tile {
     pub end_y: u32,
 }
 
+trait ObjectLike {
+    fn radius(&self) -> f64;
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredTriangle>;
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
+    ) -> Option<[f32; 3]>;
+    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8];
+}
+
 #[derive(Clone)]
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
@@ -211,13 +223,8 @@ impl Object3D {
         Option<WrappedContainingSphere<ColoredTriangle>>,
         Option<f64>,
     ) {
-        let intersector = RayIntersector::new();
-        intersector.deduce_pixel_color_fast(
-            self,
-            ray,
-            cached_sphere,
-            cached_distance,
-        )
+        let intersector = RayIntersector::<Object3D>::new();
+        intersector.deduce_pixel_color_fast(self, ray, cached_sphere, cached_distance)
     }
 
     pub fn radius(&self) -> f64 {
@@ -293,39 +300,6 @@ impl Object3D {
         }
     }
 
-    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
-        let min_point = self.min_point;
-        let max_point = self.max_point;
-        [
-            Vec3d::new(min_point.x, min_point.y, min_point.z),
-            Vec3d::new(min_point.x, min_point.y, max_point.z),
-            Vec3d::new(min_point.x, max_point.y, min_point.z),
-            Vec3d::new(min_point.x, max_point.y, max_point.z),
-            Vec3d::new(max_point.x, min_point.y, min_point.z),
-            Vec3d::new(max_point.x, min_point.y, max_point.z),
-            Vec3d::new(max_point.x, max_point.y, min_point.z),
-            Vec3d::new(max_point.x, max_point.y, max_point.z),
-        ]
-    }
-
-    fn deduce_hit_color(
-        &self,
-        ray: Ray,
-        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
-    ) -> Option<[f32; 3]> {
-        let mut hit_color = None;
-        let mut min_dist = f64::INFINITY;
-        for tri in &containing_sphere.sphere.contained_shapes {
-            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                if dist < min_dist {
-                    min_dist = dist;
-                    hit_color = Some(tri.color);
-                }
-            }
-        }
-        hit_color
-    }
-
     fn deduce_min_point(&self) -> Vec3d {
         let mut min_point = Vec3d::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
         for tri in &self.triangles {
@@ -364,6 +338,12 @@ impl Object3D {
                 center, radius,
             )));
     }
+}
+
+impl ObjectLike for Object3D {
+    fn radius(&self) -> f64 {
+        self.radius
+    }
 
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredTriangle> {
         //check that all three coordinates are within the bounding box
@@ -399,6 +379,39 @@ impl Object3D {
         );
         let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
         return WrappedContainingSphere::new(ContainingSphere::new(center, radius_times_sqrt_3));
+    }
+
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere<ColoredTriangle>,
+    ) -> Option<[f32; 3]> {
+        let mut hit_color = None;
+        let mut min_dist = f64::INFINITY;
+        for tri in &containing_sphere.sphere.contained_shapes {
+            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
+                if dist < min_dist {
+                    min_dist = dist;
+                    hit_color = Some(tri.color);
+                }
+            }
+        }
+        hit_color
+    }
+
+    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
+        let min_point = self.min_point;
+        let max_point = self.max_point;
+        [
+            Vec3d::new(min_point.x, min_point.y, min_point.z),
+            Vec3d::new(min_point.x, min_point.y, max_point.z),
+            Vec3d::new(min_point.x, max_point.y, min_point.z),
+            Vec3d::new(min_point.x, max_point.y, max_point.z),
+            Vec3d::new(max_point.x, min_point.y, min_point.z),
+            Vec3d::new(max_point.x, min_point.y, max_point.z),
+            Vec3d::new(max_point.x, max_point.y, min_point.z),
+            Vec3d::new(max_point.x, max_point.y, max_point.z),
+        ]
     }
 }
 
@@ -531,16 +544,20 @@ impl UniverseObject2D {
     }
 }
 
-struct RayIntersector {}
+struct RayIntersector<O: ObjectLike> {
+    _marker: std::marker::PhantomData<O>,
+}
 
-impl RayIntersector {
+impl<O: ObjectLike> RayIntersector<O> {
     fn new() -> Self {
-        RayIntersector {}
+        RayIntersector {
+            _marker: std::marker::PhantomData,
+        }
     }
 
     pub fn deduce_pixel_color_fast(
         &self,
-        object: &Object3D,
+        object: &O,
         ray: Ray,
         mut cached_sphere: Option<WrappedContainingSphere<ColoredTriangle>>,
         mut cached_distance: Option<f64>,
