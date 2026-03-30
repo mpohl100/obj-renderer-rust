@@ -1,5 +1,5 @@
-use obj_renderer_rust::scene::{ColoredTriangle, Object3D, Scene};
 use obj_renderer_rust::camera::Camera;
+use obj_renderer_rust::scene::{ColoredTriangle, Object3D, Scene};
 
 use clap::Parser;
 use wavefront_obj::obj::parse;
