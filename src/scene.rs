@@ -682,16 +682,7 @@ pub struct Scene<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> {
 impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O> {
     /// @brief Creates a new scene with the standard cartesian coordinate system and a camera looking at the origin
     /// @return Scene
-    pub fn new(obj: O) -> Self {
-        let camera = Camera::new(
-            Vec3d::new(0.0, 0.0, 5.0), // position
-            Vec3d::new(0.0, 0.0, 0.0), // look_at
-            Vec3d::new(0.0, 1.0, 0.0), // up
-            60.0,                      // fov
-            16.0 / 9.0,                // aspect ratio
-            0.1,                       // near
-            100.0,                     // far
-        );
+    pub fn new(obj: O, camera: Camera) -> Self {
         Scene {
             _shape_marker: std::marker::PhantomData,
             object: obj,

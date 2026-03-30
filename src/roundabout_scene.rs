@@ -1,5 +1,7 @@
 use obj_renderer_rust::scene::{ColoredTriangle, Object3D, Scene};
-use obj_renderer_rust::camera::Camera;
+use obj_renderer_rust::linear_optimizer::LinearOptimizer;
+use obj_renderer_rust::coordinate_system::SphericalCoordinates;
+use obj_renderer_rust::camera_position_optimizer::CameraPositionOptimizer;
 
 use clap::Parser;
 use wavefront_obj::obj::parse;
@@ -111,22 +113,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     obj.position_spheres();
-    let camera = Camera::new(
-        Vec3d::new(0.0, 0.0, 5.0), // position
-        Vec3d::new(0.0, 0.0, 0.0), // look_at
-        Vec3d::new(0.0, 1.0, 0.0), // up
-        60.0,                      // fov
-        16.0 / 9.0,                // aspect ratio
-        0.1,                       // near
-        100.0,                     // far
-    );
-    let scene = Scene::new(obj, camera);
-    println!(
-        "Loaded scene with {} triangles.",
-        scene.object().triangles().len()
-    );
 
-    scene.take_picture(&args.output_file);
+    let num_theta_steps = 10;
+    let num_phi_steps = 10;
+    for step_theta in 0..num_theta_steps {
+        for step_phi in 0..num_phi_steps {
+            let theta = (step_theta as f64 / num_theta_steps as f64) * std::f64::consts::PI;
+            let phi = (step_phi as f64 / num_phi_steps as f64) * 2.0 * std::f64::consts::PI;
+            let spherical_coordinates = SphericalCoordinates {
+                radius: 10.0,
+                theta,
+                phi,
+            };
+            let camera_position_optimizer =
+                CameraPositionOptimizer::new(obj.clone(), spherical_coordinates);
+            let linear_optimizer = LinearOptimizer::new(camera_position_optimizer);
+            let optimized_camera_position_optimizer =
+                linear_optimizer.optimize(5.0, 15.0, 100.0);
+            let camera = optimized_camera_position_optimizer.camera_ray().camera();
+            println!(
+                "Optimized camera position for theta {:.2}, phi {:.2}: {:?}",
+                theta, phi, camera.position);
+            let scene = Scene::new(obj.clone(), camera.clone());
+            println!("Rendered scene for theta {:.2}, phi {:.2}", theta, phi);
+
+            scene.take_picture(&format!(
+                "output_theta_{:.2}_phi_{:.2}.png",
+                theta, phi
+            ));
+        }
+    }
 
     Ok(())
 }
