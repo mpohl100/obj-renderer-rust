@@ -1,7 +1,7 @@
-use obj_renderer_rust::scene::{ColoredTriangle, Object3D, Scene};
-use obj_renderer_rust::linear_optimizer::LinearOptimizer;
-use obj_renderer_rust::coordinate_system::SphericalCoordinates;
 use obj_renderer_rust::camera_position_optimizer::CameraPositionOptimizer;
+use obj_renderer_rust::coordinate_system::SphericalCoordinates;
+use obj_renderer_rust::linear_optimizer::LinearOptimizer;
+use obj_renderer_rust::scene::{ColoredTriangle, Object3D, Scene};
 
 use clap::Parser;
 use wavefront_obj::obj::parse;
@@ -128,19 +128,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let camera_position_optimizer =
                 CameraPositionOptimizer::new(obj.clone(), spherical_coordinates);
             let linear_optimizer = LinearOptimizer::new(camera_position_optimizer);
-            let optimized_camera_position_optimizer =
-                linear_optimizer.optimize(5.0, 15.0, 100.0);
+            let optimized_camera_position_optimizer = linear_optimizer.optimize(5.0, 15.0, 100.0);
             let camera = optimized_camera_position_optimizer.camera_ray().camera();
             println!(
                 "Optimized camera position for theta {:.2}, phi {:.2}: {:?}",
-                theta, phi, camera.position);
+                theta, phi, camera.position
+            );
             let scene = Scene::new(obj.clone(), camera.clone());
             println!("Rendered scene for theta {:.2}, phi {:.2}", theta, phi);
 
-            scene.take_picture(&format!(
-                "output_theta_{:.2}_phi_{:.2}.png",
-                theta, phi
-            ));
+            scene.take_picture(&format!("output_theta_{:.2}_phi_{:.2}.png", theta, phi));
         }
     }
 

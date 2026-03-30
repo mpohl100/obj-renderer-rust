@@ -73,13 +73,13 @@ impl HasVertices for ColoredTriangle {
 }
 
 #[derive(Clone)]
-struct Sphere {
-    center: Vec3d,
-    radius: f64,
+pub struct Sphere {
+    pub center: Vec3d,
+    pub radius: f64,
 }
 
 #[derive(Clone)]
-struct ColoredSphere {
+pub struct ColoredSphere {
     pub sphere: Sphere,
     pub color: [f32; 3], // RGB
 }
@@ -102,7 +102,7 @@ impl HasVertices for ColoredSphere {
     }
 }
 
-trait HasVertices {
+pub trait HasVertices {
     fn vertices(&self) -> &[Vec3d];
 }
 
@@ -146,7 +146,7 @@ impl<Shape: HasVertices + Clone + 'static> ContainingSphere<Shape> {
 }
 
 #[derive(Clone)]
-struct WrappedContainingSphere<Shape: HasVertices + Clone + 'static> {
+pub struct WrappedContainingSphere<Shape: HasVertices + Clone + 'static> {
     sphere: Arc<ContainingSphere<Shape>>,
 }
 
@@ -157,7 +157,7 @@ impl<Shape: HasVertices + Clone + 'static> WrappedContainingSphere<Shape> {
         }
     }
 
-    fn contains(&self, shape: &Shape) -> bool {
+    fn _contains(&self, shape: &Shape) -> bool {
         self.sphere.contains(shape)
     }
 
@@ -176,7 +176,7 @@ pub struct Tile {
     pub end_y: u32,
 }
 
-trait ObjectLike<Shape: HasVertices + Clone + 'static> {
+pub trait ObjectLike<Shape: HasVertices + Clone + 'static> {
     fn radius(&self) -> f64;
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<Shape>;
     fn deduce_hit_color(
@@ -191,7 +191,7 @@ trait ObjectLike<Shape: HasVertices + Clone + 'static> {
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
     spheres: Vec<WrappedContainingSphere<ColoredTriangle>>,
-    coordinate_system: CoordinateSystem3D,
+    _coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
     radius: f64,
@@ -203,7 +203,7 @@ impl Object3D {
         Object3D {
             triangles: Vec::new(),
             spheres: Vec::new(),
-            coordinate_system: CoordinateSystem3D::standard(),
+            _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
             max_point: Vec3d::new(0.0, 0.0, 0.0),
             radius: 0.0,
@@ -438,7 +438,7 @@ pub struct UniverseObject2D {
 }
 
 impl UniverseObject2D {
-    fn _new(num_balls_x: usize, num_balls_y: usize) -> Self {
+    pub fn new(num_balls_x: usize, num_balls_y: usize) -> Self {
         let mut balls = Vec::new();
 
         // vec_1 is (0.5, sqrt(3)/2.0, 0.0)
@@ -462,11 +462,11 @@ impl UniverseObject2D {
             max_point: Vec3d::new(0.0, 0.0, 0.0),
             radius: 0.0,
         };
-        obj._deduce_bounding_box_and_position_spheres();
+        obj.deduce_bounding_box_and_position_spheres();
         obj
     }
 
-    fn _deduce_bounding_box_and_position_spheres(&mut self) {
+    fn deduce_bounding_box_and_position_spheres(&mut self) {
         self.radius = 2.0_f64.sqrt();
         for ball_line in &self._balls {
             for ball in &ball_line._balls {

@@ -17,3 +17,7 @@ path = "src/main.rs"
 [[bin]]
 name = "roundabout_scene"
 path = "src/roundabout_scene.rs"
+
+[[bin]]
+name = "universe_Scene"
+path = "src/universe_scene.rs"
