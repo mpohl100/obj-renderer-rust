@@ -75,8 +75,7 @@ impl Camera {
 
     /// @brief Calculates the distance between the camera's focal point and the image plane
     pub fn distance_between_focal_point_and_image_plane(&self) -> f64 {
-        let focal_length = 1.0 / ((self.fov.to_radians() / 2.0).tan() as f64);
-        focal_length
+        1.0 / ((self.fov.to_radians() / 2.0).tan() as f64)
     }
 
     /// @brief Returns the focal point of the camera

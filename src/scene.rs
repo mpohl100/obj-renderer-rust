@@ -1,9 +1,6 @@
-use clap::Error;
 use rs_math3d::FloatVector;
 use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
-use wavefront_obj::obj;
-use wavefront_obj::obj::Object;
 
 use core::panic;
 use std::sync::Arc;
@@ -33,7 +30,7 @@ pub fn ray_triangle_intersect(
     let f = 1.0 / a;
     let s = ray.origin - v0;
     let u = f * rs_math3d::Vec3d::dot(&s, &h);
-    if u < 0.0 || u > 1.0 {
+    if !(0.0..=1.0).contains(&u) {
         return None;
     }
     let q = rs_math3d::Vec3d::cross(&s, &edge1);
@@ -241,8 +238,7 @@ impl Object3D {
 
     pub fn bounding_box_radius(&self) -> f64 {
         let center = self.center();
-        let distance = (self.max_point - center).length();
-        distance
+        (self.max_point - center).length()
     }
 
     pub fn bounding_box(&self) -> (Vec3d, Vec3d) {
@@ -261,7 +257,7 @@ impl Object3D {
         self.max_point = self.deduce_max_point();
         let avg_triangle_area = self.deduce_average_triangle_area();
         self.radius = avg_triangle_area.sqrt();
-        let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
+        let radius_times_sqrt_3 = self.radius * (3.0_f64).sqrt();
 
         let mut current_point = self.min_point;
         while current_point.x <= self.max_point.x {
@@ -351,10 +347,9 @@ impl ObjectLike<ColoredTriangle> for Object3D {
             && point.y <= max_point.y
             && point.z >= min_point.z
             && point.z <= max_point.z
+            && index < self.spheres.len()
         {
-            if index < self.spheres.len() {
-                return self.spheres[index].clone();
-            }
+            return self.spheres[index].clone();
         }
 
         // calculate the center of the sphere at the point
@@ -363,8 +358,8 @@ impl ObjectLike<ColoredTriangle> for Object3D {
             min_point.y + (y_coordinate as f64 + 0.5) * self.radius * 2.0,
             min_point.z + (z_coordinate as f64 + 0.5) * self.radius * 2.0,
         );
-        let radius_times_sqrt_3 = self.radius * (3.0 as f64).sqrt();
-        return WrappedContainingSphere::new(ContainingSphere::new(center, radius_times_sqrt_3));
+        let radius_times_sqrt_3 = self.radius * (3.0_f64).sqrt();
+        WrappedContainingSphere::new(ContainingSphere::new(center, radius_times_sqrt_3))
     }
 
     fn deduce_hit_color(
@@ -403,10 +398,10 @@ impl ObjectLike<ColoredTriangle> for Object3D {
 
 #[derive(Clone)]
 struct BallLine {
-    balls: Vec<ColoredSphere>,
-    center_x: f64,
-    center_y: f64,
-    spacing: f64,
+    _balls: Vec<ColoredSphere>,
+    _center_x: f64,
+    _center_y: f64,
+    _spacing: f64,
 }
 
 impl BallLine {
@@ -424,32 +419,32 @@ impl BallLine {
             balls.push(ColoredSphere::new(center, radius, color));
         }
         BallLine {
-            balls,
-            center_x,
-            center_y,
-            spacing,
+            _balls: balls,
+            _center_x: center_x,
+            _center_y: center_y,
+            _spacing: spacing,
         }
     }
 }
 
 #[derive(Clone)]
 pub struct UniverseObject2D {
-    balls: Vec<BallLine>,
+    _balls: Vec<BallLine>,
     spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
-    coordinate_system: CoordinateSystem3D,
+    _coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
     radius: f64,
 }
 
 impl UniverseObject2D {
-    fn new(num_balls_x: usize, num_balls_y: usize) -> Self {
+    fn _new(num_balls_x: usize, num_balls_y: usize) -> Self {
         let mut balls = Vec::new();
 
         // vec_1 is (0.5, sqrt(3)/2.0, 0.0)
-        let vec_1 = Vec3d::new(0.5, (3.0 as f64).sqrt() / 2.0, 0.0);
+        let vec_1 = Vec3d::new(0.5, (3.0_f64).sqrt() / 2.0, 0.0);
         // vec_2 is (-0.5, sqrt(3)/2.0, 0.0)
-        let vec_2 = Vec3d::new(-0.5, (3.0 as f64).sqrt() / 2.0, 0.0);
+        let vec_2 = Vec3d::new(-0.5, (3.0_f64).sqrt() / 2.0, 0.0);
         for i in 0..num_balls_y {
             let center = Vec3d::new(0.0, 0.0, 0.0);
             let num_1 = i / 2 + i % 2;
@@ -460,21 +455,21 @@ impl UniverseObject2D {
             balls.push(ball_line);
         }
         let mut obj = UniverseObject2D {
-            balls,
+            _balls: balls,
             spheres: Vec::new(),
-            coordinate_system: CoordinateSystem3D::standard(),
+            _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
             max_point: Vec3d::new(0.0, 0.0, 0.0),
             radius: 0.0,
         };
-        obj.deduce_bounding_box_and_position_spheres();
+        obj._deduce_bounding_box_and_position_spheres();
         obj
     }
 
-    fn deduce_bounding_box_and_position_spheres(&mut self) {
+    fn _deduce_bounding_box_and_position_spheres(&mut self) {
         self.radius = 2.0_f64.sqrt();
-        for ball_line in &self.balls {
-            for ball in &ball_line.balls {
+        for ball_line in &self._balls {
+            for ball in &ball_line._balls {
                 let min_point = ball.sphere.center
                     - Vec3d::new(ball.sphere.radius, ball.sphere.radius, ball.sphere.radius);
                 let max_point = ball.sphere.center
@@ -506,8 +501,8 @@ impl UniverseObject2D {
         }
 
         // add the balls to the containing spheres
-        for ball_line in &self.balls {
-            for ball in &ball_line.balls {
+        for ball_line in &self._balls {
+            for ball in &ball_line._balls {
                 let point = ball.sphere.center;
                 let containing_sphere = self.get_sphere(point);
                 containing_sphere.add_shape(ball.clone());
@@ -678,7 +673,7 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> RayIntersector<
 pub struct Scene<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> {
     _shape_marker: std::marker::PhantomData<Shape>,
     object: O,
-    coordinate_system: CoordinateSystem3D,
+    _coordinate_system: CoordinateSystem3D,
     camera: Camera,
     pixel_width: u32,
     pixel_height: u32,
@@ -701,7 +696,7 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O>
             _shape_marker: std::marker::PhantomData,
             object: obj,
             camera,
-            coordinate_system: CoordinateSystem3D::standard(),
+            _coordinate_system: CoordinateSystem3D::standard(),
             pixel_width: 800,
             pixel_height: 450,
         }
@@ -725,8 +720,8 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O>
                 let colors = self.deduce_pixel_colors_fast(tile.clone());
                 let mut index = 0;
                 let mut color_results = Vec::new();
-                for y in tile.start_y..tile.end_y {
-                    for x in tile.start_x..tile.end_x {
+                for _ in tile.start_y..tile.end_y {
+                    for _ in tile.start_x..tile.end_x {
                         let hit_color = colors[index];
                         index += 1;
                         let rgb = Rgb([
@@ -754,7 +749,7 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O>
 
     /// @brief Returns a reference to the camera
     /// @return Reference to Camera
-    pub fn camera(&self) -> &Camera {
+    pub fn _camera(&self) -> &Camera {
         &self.camera
     }
 
@@ -773,7 +768,7 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> Scene<Shape, O>
                         &self.object,
                         ray,
                         cached_sphere.clone(),
-                        cached_distance.clone(),
+                        cached_distance,
                     );
                 cached_sphere = new_cached_sphere;
                 cached_distance = new_cached_distance;
