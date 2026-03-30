@@ -1,12 +1,12 @@
 use crate::camera::Camera;
-use crate::camera::{self, Ray};
+use crate::camera::Ray;
 use crate::coordinate_system::CoordinateSystem3D;
 use crate::coordinate_system::SphericalCoordinates;
 use crate::linear_optimizer::Objective;
 use crate::scene::Object3D;
 use rs_math3d::FloatVector;
 use rs_math3d::Vector3;
-use rs_math3d::{CrossProduct, Vec3d, Vector};
+use rs_math3d::{Vec3d, Vector};
 
 #[derive(Clone)]
 pub struct CameraRay {
@@ -102,7 +102,7 @@ impl Objective for CameraPositionOptimizer {
         // construct an area through the center of mass and whose normal is the vector from the center of mass and the camare focal point
         let camera_focal_point = self.camera_ray.camera.focal_point();
         let normal = (camera_focal_point - center_of_mass).normalize();
-        let d = -Vector3::<f64>::dot(&normal, &center_of_mass);
+        let _d = -Vector3::<f64>::dot(&normal, &center_of_mass);
         let area = Area::new(normal, center_of_mass);
 
         // calculate the intersection of the tl, tr, bl, br rays with the area
@@ -146,7 +146,7 @@ impl Objective for CameraPositionOptimizer {
 
         // calculate the diagonal ray of the intersection points through the origin of the coordinate system
         let diagonal_ray = Ray {
-            origin: coordinate_system.origin().clone(),
+            origin: *coordinate_system.origin(),
             direction: (tr_intersection.unwrap() - bl_intersection.unwrap()).normalize(),
         };
 

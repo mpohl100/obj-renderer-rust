@@ -44,13 +44,11 @@ impl<Obj: Objective> LinearOptimizer<Obj> {
                     step /= 2.0;
                     current_x -= step;
                 }
+            } else if current_eval > target {
+                current_x += step;
             } else {
-                if current_eval > target {
-                    current_x += step;
-                } else {
-                    step /= 2.0;
-                    current_x -= step;
-                }
+                step /= 2.0;
+                current_x -= step;
             }
         }
     }
@@ -71,14 +69,12 @@ impl<Obj: Objective> LinearOptimizer<Obj> {
         } else if left_eval > target && right_eval > target {
             start_x = (left_x + right_x) / 2.0;
             start_step = -(right_x - left_x) / 4.0;
+        } else if left_eval < right_eval {
+            start_x = left_x;
+            start_step = (right_x - left_x) / 4.0;
         } else {
-            if left_eval < right_eval {
-                start_x = left_x;
-                start_step = (right_x - left_x) / 4.0;
-            } else {
-                start_x = right_x;
-                start_step = -(right_x - left_x) / 4.0;
-            }
+            start_x = right_x;
+            start_step = -(right_x - left_x) / 4.0;
         }
         (start_x, start_step)
     }

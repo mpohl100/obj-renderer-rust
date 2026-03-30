@@ -6,9 +6,7 @@ mod scene;
 use scene::{ColoredTriangle, Object3D, Scene};
 
 use clap::Parser;
-use std::fs::File;
-use std::io::BufReader;
-use wavefront_obj::obj::{parse, Object};
+use wavefront_obj::obj::parse;
 
 /// @brief Command line arguments for obj-renderer
 #[derive(Parser, Debug)]
@@ -21,6 +19,10 @@ struct Args {
     /// Path to the MTL file
     #[arg(long = "mtl-file")]
     mtl_file: String,
+
+    /// Output image filename
+    #[arg(long = "output-file", default_value = "output.png")]
+    output_file: String,
 }
 
 use rs_math3d::Vector;
@@ -102,9 +104,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut polygon = Vec::new();
         for vertex in object.vertices {
             polygon.push(Vec3d::new(
-                vertex.x as f64,
-                vertex.y as f64,
-                vertex.z as f64,
+                vertex.x,
+                vertex.y,
+                vertex.z,
             ));
         }
         let triangles = triangulate(&polygon);
@@ -122,5 +124,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Loaded scene with {} triangles.",
         scene.object().triangles().len()
     );
+
+    scene.take_picture(&args.output_file);
+
     Ok(())
 }
