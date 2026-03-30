@@ -1,6 +1,6 @@
-use rs_math3d::Vec3d;
-use rs_math3d::FloatVector;
 use rs_math3d::CrossProduct;
+use rs_math3d::FloatVector;
+use rs_math3d::Vec3d;
 
 /// @brief Represents a standard 3D camera
 /// @param position The position of the camera in world coordinates
@@ -31,7 +31,15 @@ impl Camera {
     /// @param near Near plane
     /// @param far Far plane
     /// @return Camera
-    pub fn new(position: Vec3d, look_at: Vec3d, up: Vec3d, fov: f32, aspect_ratio: f32, near: f32, far: f32) -> Self {
+    pub fn new(
+        position: Vec3d,
+        look_at: Vec3d,
+        up: Vec3d,
+        fov: f32,
+        aspect_ratio: f32,
+        near: f32,
+        far: f32,
+    ) -> Self {
         Camera {
             position,
             look_at,
@@ -65,10 +73,9 @@ impl Camera {
         }
     }
 
-
     /// @brief Calculates the distance between the camera's focal point and the image plane
     pub fn distance_between_focal_point_and_image_plane(&self) -> f64 {
-        let focal_length = 1.0 / ( (self.fov.to_radians() / 2.0).tan() as f64 );
+        let focal_length = 1.0 / ((self.fov.to_radians() / 2.0).tan() as f64);
         focal_length
     }
 
