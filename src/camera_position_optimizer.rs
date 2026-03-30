@@ -1,12 +1,12 @@
+use crate::camera::Camera;
+use crate::camera::{self, Ray};
+use crate::coordinate_system::CoordinateSystem3D;
+use crate::coordinate_system::SphericalCoordinates;
 use crate::linear_optimizer::Objective;
 use crate::scene::Object3D;
-use crate::coordinate_system::SphericalCoordinates;
-use rs_math3d::{Vec3d, Vector, CrossProduct};
-use rs_math3d::Vector3;
 use rs_math3d::FloatVector;
-use crate::camera::{self, Ray};
-use crate::camera::Camera;
-use crate::coordinate_system::CoordinateSystem3D;
+use rs_math3d::Vector3;
+use rs_math3d::{CrossProduct, Vec3d, Vector};
 
 #[derive(Clone)]
 pub struct CameraRay {
@@ -19,14 +19,10 @@ impl CameraRay {
     pub fn new(camera: Camera) -> Self {
         let ray = camera.generate_ray(0.5, 0.5);
         let width = camera.distance_between_focal_point_and_image_plane();
-        CameraRay {
-            ray,
-            camera,
-            width,
-        }
+        CameraRay { ray, camera, width }
     }
 
-    pub fn position_camera(&mut self, x: f64){
+    pub fn position_camera(&mut self, x: f64) {
         let factor = x * self.width;
         let new_target_point = self.ray.origin + self.ray.direction * factor;
         self.camera.position = new_target_point;
@@ -35,7 +31,7 @@ impl CameraRay {
     pub fn focal_point(&self) -> Vec3d {
         self.camera.focal_point()
     }
-}   
+}
 
 struct Area {
     normal: Vec3d,
@@ -58,18 +54,16 @@ impl Area {
             return None; // Intersection is behind the ray origin
         }
         Some(ray.origin + ray.direction * t)
-    } 
-
+    }
 }
 
 #[derive(Clone)]
-pub struct CameraPositionOptimizer{
+pub struct CameraPositionOptimizer {
     object3d: Object3D,
     camera_ray: CameraRay,
 }
 
 impl CameraPositionOptimizer {
-
     pub fn new(object3d: Object3D, spherical_coordinates: SphericalCoordinates) -> Self {
         let center = object3d.center();
         let adjusted_spherical_coordinates = SphericalCoordinates {
@@ -93,7 +87,6 @@ impl CameraPositionOptimizer {
             camera_ray,
         }
     }
-
 }
 
 impl Objective for CameraPositionOptimizer {
@@ -165,15 +158,19 @@ impl Objective for CameraPositionOptimizer {
         }
 
         // calculate the projections if the projected points onto the diagonal ray
-        let points_on_diagonal: Vec<f64> = projected_points.iter().map(|p| {
-            Vector3::<f64>::dot(p, &diagonal_ray.direction)
-        }).collect();
+        let points_on_diagonal: Vec<f64> = projected_points
+            .iter()
+            .map(|p| Vector3::<f64>::dot(p, &diagonal_ray.direction))
+            .collect();
 
         // calculate the t values of the points on the diagonal
-        let t_values: Vec<f64> = points_on_diagonal.iter().map(|p| {
-            let origin_dot = Vector3::<f64>::dot(&diagonal_ray.origin, &diagonal_ray.direction);
-            (*p - origin_dot) / diagonal_ray.direction.length()
-        }).collect();
+        let t_values: Vec<f64> = points_on_diagonal
+            .iter()
+            .map(|p| {
+                let origin_dot = Vector3::<f64>::dot(&diagonal_ray.origin, &diagonal_ray.direction);
+                (*p - origin_dot) / diagonal_ray.direction.length()
+            })
+            .collect();
 
         // sort the t values
         let mut sorted_t_values = t_values.clone();
@@ -184,7 +181,7 @@ impl Objective for CameraPositionOptimizer {
         let tr_point_on_diagonal = Vector3::<f64>::dot(&tr_local, &diagonal_ray.direction);
         let origin_dot = Vector3::<f64>::dot(&diagonal_ray.origin, &diagonal_ray.direction);
         let tr_t_value = (tr_point_on_diagonal - origin_dot) / diagonal_ray.direction.length();
-        
+
         // return the lowest t_value divided by the tr_t_value
         let distance = sorted_t_values[0] / tr_t_value;
         if distance.is_nan() {

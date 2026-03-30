@@ -1,14 +1,14 @@
 mod camera;
-mod scene;
-mod coordinate_system;
 mod camera_position_optimizer;
+mod coordinate_system;
 mod linear_optimizer;
-use scene::{ColoredTriangle, Scene, Object3D};
+mod scene;
+use scene::{ColoredTriangle, Object3D, Scene};
 
 use clap::Parser;
-use wavefront_obj::obj::{Object, parse};
 use std::fs::File;
 use std::io::BufReader;
+use wavefront_obj::obj::{parse, Object};
 
 /// @brief Command line arguments for obj-renderer
 #[derive(Parser, Debug)]
@@ -99,9 +99,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // parse all the polygons of the dome
     for object in dome.objects {
-        let mut polygon  = Vec::new();
+        let mut polygon = Vec::new();
         for vertex in object.vertices {
-            polygon.push(Vec3d::new(vertex.x as f64, vertex.y as f64, vertex.z as f64));
+            polygon.push(Vec3d::new(
+                vertex.x as f64,
+                vertex.y as f64,
+                vertex.z as f64,
+            ));
         }
         let triangles = triangulate(&polygon);
         for tri in triangles {
@@ -112,9 +116,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-
     obj.position_spheres();
     let scene = Scene::new(obj);
-    println!("Loaded scene with {} triangles.", scene.object().triangles().len());
+    println!(
+        "Loaded scene with {} triangles.",
+        scene.object().triangles().len()
+    );
     Ok(())
 }
