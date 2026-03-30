@@ -31,6 +31,10 @@ impl CameraRay {
     pub fn focal_point(&self) -> Vec3d {
         self.camera.focal_point()
     }
+
+    pub fn camera(&self) -> &Camera {
+        &self.camera
+    }
 }
 
 struct Area {
@@ -86,6 +90,10 @@ impl CameraPositionOptimizer {
             object3d,
             camera_ray,
         }
+    }
+
+    pub fn camera_ray(&self) -> &CameraRay {
+        &self.camera_ray
     }
 }
 
