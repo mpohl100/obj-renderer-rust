@@ -197,6 +197,12 @@ pub struct Object3D {
     radius: f64,
 }
 
+impl Default for Object3D {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Object3D {
     /// @brief Creates a new empty Object3D
     pub fn new() -> Self {
