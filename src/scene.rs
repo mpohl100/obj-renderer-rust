@@ -595,7 +595,12 @@ pub struct MedicalObject3D {
 }
 
 impl MedicalObject3D {
-    pub fn new(voxels: Vec<Voxel>, radius: f64, containing_radius: f64, color_threshold: f32) -> Self {
+    pub fn new(
+        voxels: Vec<Voxel>,
+        radius: f64,
+        containing_radius: f64,
+        color_threshold: f32,
+    ) -> Self {
         let mut obj = MedicalObject3D {
             _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
@@ -627,6 +632,9 @@ impl MedicalObject3D {
             max_point.z = max_point.z.max(voxel.position.z);
         }
 
+        self.min_point = min_point;
+        self.max_point = max_point;
+
         // position spheres
         let diameter = containing_radius / (3.0_f64).sqrt() * 2.0;
         let mut current_point = min_point;
@@ -634,11 +642,9 @@ impl MedicalObject3D {
             while current_point.y <= max_point.y {
                 while current_point.z <= max_point.z {
                     // Here you would add a sphere at current_point with the calculated radius
-                    self.containing_spheres
-                        .push(WrappedContainingSphere::new(ContainingSphere::new(
-                            current_point,
-                            containing_radius,
-                        )));
+                    self.containing_spheres.push(WrappedContainingSphere::new(
+                        ContainingSphere::new(current_point, containing_radius),
+                    ));
                     current_point.z += diameter; // Move to the next position in z
                 }
                 current_point.y += diameter; // Move to the next position in y
@@ -653,17 +659,12 @@ impl MedicalObject3D {
         for voxel in voxels {
             let point = voxel.position;
             let containing_sphere = self.get_sphere(point);
-            containing_sphere.add_shape(ColoredSphere::new(
-                point,
-                radius,
-                voxel.color,
-            ));
+            containing_sphere.add_shape(ColoredSphere::new(point, radius, voxel.color));
         }
     }
 }
 
 impl ObjectLike<ColoredSphere> for MedicalObject3D {
-
     fn radius(&self) -> f64 {
         self.radius
     }
@@ -705,9 +706,7 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
                 let t1 = (-b - discriminant.sqrt()) / (2.0 * a);
                 let t2 = (-b + discriminant.sqrt()) / (2.0 * a);
                 let t = if t1 > 1e-6 { t1 } else { t2 };
-                if t > 1e-6
-                    && t < min_dist
-                {
+                if t > 1e-6 && t < min_dist {
                     min_dist = t;
                     hit_color = Some(ball.color);
                 }
