@@ -642,7 +642,7 @@ impl MedicalObject3D {
         self.max_point = max_point;
 
         // position spheres
-        let diameter = containing_radius / (3.0_f64).sqrt() * 2.0;
+        let diameter = containing_radius * 2.0;
         let mut current_point = min_point;
         while current_point.x <= max_point.x {
             while current_point.y <= max_point.y {
@@ -676,7 +676,7 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
     }
 
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredSphere> {
-        let diameter = self.containing_radius / (3.0_f64).sqrt() * 2.0;
+        let diameter = self.containing_radius * 2.0;
         let index_x = ((point.x - self.min_point.x) / diameter).floor() as usize;
         let index_y = ((point.y - self.min_point.y) / diameter).floor() as usize;
         let index_z = ((point.z - self.min_point.z) / diameter).floor() as usize;
@@ -686,7 +686,13 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
         if index < self.containing_spheres.len() {
             return self.containing_spheres[index].clone();
         }
-        panic!("No containing sphere found for point {:?}", point);
+        // calculate the center of the containing sphere
+        let center = Vec3d::new(
+            self.min_point.x + (index_x as f64 + 0.5) * diameter,
+            self.min_point.y + (index_y as f64 + 0.5) * diameter,
+            self.min_point.z + (index_z as f64 + 0.5) * diameter,
+        );
+        WrappedContainingSphere::new(ContainingSphere::new(center, self.containing_radius))
     }
 
     fn deduce_hit_color(
