@@ -533,7 +533,13 @@ impl ObjectLike<ColoredSphere> for UniverseObject2D {
         if index < self.spheres.len() {
             return self.spheres[index].clone();
         }
-        panic!("No containing sphere found for point {:?}", point);
+        // calculate the center of the containing sphere
+        let center = Vec3d::new(
+            self.min_point.x + (index_x as f64 + 0.5) * diameter,
+            self.min_point.y + (index_y as f64 + 0.5) * diameter,
+            self.min_point.z + (index_z as f64 + 0.5) * diameter,
+        );
+        WrappedContainingSphere::new(ContainingSphere::new(center, self.radius))
     }
 
     fn deduce_hit_color(
@@ -762,7 +768,6 @@ impl<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> RayIntersector<
             .map(|corner| (*corner - ray.origin).length())
             .collect::<Vec<f64>>();
 
-        // probe whether we hit the same sphere as last time
         let is_same_sphere = match &cached_sphere {
             Some(sphere) => {
                 let point_in_sphere = ray.origin + ray.direction * cached_distance.unwrap_or(0.0);
