@@ -175,6 +175,38 @@ pub struct Tile {
     pub end_y: u32,
 }
 
+#[derive(Clone)]
+struct Grid<Shape: HasVertices + Clone + 'static> {
+    _phantom: std::marker::PhantomData<Shape>,
+    min_point: Vec3d,
+    cell_length: f64,
+}
+
+impl<Shape: HasVertices + Clone + 'static> Grid<Shape> {
+    fn new(min_point: Vec3d, cell_length: f64) -> Self {
+        Grid {
+            _phantom: std::marker::PhantomData,
+            min_point,
+            cell_length,
+        }
+    }
+
+    fn get_containing_sphere(&self, point: Vec3d) -> WrappedContainingSphere<Shape> {
+        let x_index = ((point.x - self.min_point.x) / self.cell_length).floor() as i32;
+        let y_index = ((point.y - self.min_point.y) / self.cell_length).floor() as i32;
+        let z_index = ((point.z - self.min_point.z) / self.cell_length).floor() as i32;
+        let center = Vec3d::new(
+            self.min_point.x + (x_index as f64 + 0.5) * self.cell_length,
+            self.min_point.y + (y_index as f64 + 0.5) * self.cell_length,
+            self.min_point.z + (z_index as f64 + 0.5) * self.cell_length,
+        );
+        WrappedContainingSphere::new(ContainingSphere::new(
+            center,
+            self.cell_length * (3.0_f64).sqrt() / 2.0,
+        ))
+    }
+}
+
 pub trait ObjectLike<Shape: HasVertices + Clone + 'static> {
     fn radius(&self) -> f64;
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<Shape>;
@@ -190,6 +222,7 @@ pub trait ObjectLike<Shape: HasVertices + Clone + 'static> {
 pub struct Object3D {
     triangles: Vec<ColoredTriangle>,
     spheres: Vec<WrappedContainingSphere<ColoredTriangle>>,
+    grid: Grid<ColoredTriangle>,
     _coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
@@ -211,6 +244,7 @@ impl Object3D {
             _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
             max_point: Vec3d::new(0.0, 0.0, 0.0),
+            grid: Grid::<ColoredTriangle>::new(Vec3d::new(0.0, 0.0, 0.0), 0.0),
             radius: 0.0,
         }
     }
@@ -260,9 +294,11 @@ impl Object3D {
     pub fn position_spheres(&mut self) {
         self.min_point = self.deduce_min_point();
         self.max_point = self.deduce_max_point();
+
         let avg_triangle_area = self.deduce_average_triangle_area();
         self.radius = avg_triangle_area.sqrt();
         let radius_times_sqrt_3 = self.radius * (3.0_f64).sqrt();
+        self.grid = Grid::<ColoredTriangle>::new(self.min_point, radius_times_sqrt_3);
 
         let mut current_point = self.min_point;
         while current_point.x <= self.max_point.x {
@@ -270,7 +306,8 @@ impl Object3D {
                 while current_point.z <= self.max_point.z {
                     // Here you would add a sphere at current_point with the calculated radius
                     current_point.z += self.radius * 2.0; // Move to the next position in z
-                    self.add_sphere(current_point, radius_times_sqrt_3); // Slightly larger radius to ensure coverage
+                    self.spheres
+                        .push(self.grid.get_containing_sphere(current_point));
                 }
                 current_point.y += self.radius * 2.0; // Move to the next position in y
                 current_point.z = self.min_point.z; // Reset z to min
@@ -282,7 +319,11 @@ impl Object3D {
 
         for tri in &self.triangles {
             for sphere in &mut self.spheres {
-                sphere.add_shape(tri.clone());
+                if tri.vertices.iter().any(|&v| {
+                    (v - sphere.sphere.sphere.center).length() <= sphere.sphere.sphere.radius
+                }) {
+                    sphere.add_shape(tri.clone());
+                }
             }
         }
     }
@@ -317,13 +358,6 @@ impl Object3D {
             total_area += tri.area();
         }
         total_area / self.triangles.len() as f64
-    }
-
-    fn add_sphere(&mut self, center: Vec3d, radius: f64) {
-        self.spheres
-            .push(WrappedContainingSphere::new(ContainingSphere::new(
-                center, radius,
-            )));
     }
 }
 
@@ -436,6 +470,7 @@ impl BallLine {
 pub struct UniverseObject2D {
     _balls: Vec<BallLine>,
     spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
+    grid: Grid<ColoredSphere>,
     _coordinate_system: CoordinateSystem3D,
     min_point: Vec3d,
     max_point: Vec3d,
@@ -462,6 +497,7 @@ impl UniverseObject2D {
         let mut obj = UniverseObject2D {
             _balls: balls,
             spheres: Vec::new(),
+            grid: Grid::<ColoredSphere>::new(Vec3d::new(0.0, 0.0, 0.0), 0.0),
             _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
             max_point: Vec3d::new(0.0, 0.0, 0.0),
@@ -494,10 +530,7 @@ impl UniverseObject2D {
             while current_point.y <= self.max_point.y {
                 while current_point.z <= self.max_point.z {
                     self.spheres
-                        .push(WrappedContainingSphere::new(ContainingSphere::new(
-                            current_point,
-                            self.radius,
-                        )));
+                        .push(self.grid.get_containing_sphere(current_point));
                     current_point.z += self.radius * 2.0;
                 }
                 current_point.y += self.radius * 2.0;
@@ -533,12 +566,7 @@ impl ObjectLike<ColoredSphere> for UniverseObject2D {
             return self.spheres[index].clone();
         }
         // calculate the center of the containing sphere
-        let center = Vec3d::new(
-            self.min_point.x + (index_x as f64 + 0.5) * diameter,
-            self.min_point.y + (index_y as f64 + 0.5) * diameter,
-            self.min_point.z + (index_z as f64 + 0.5) * diameter,
-        );
-        WrappedContainingSphere::new(ContainingSphere::new(center, self.radius))
+        self.grid.get_containing_sphere(point)
     }
 
     fn deduce_hit_color(
@@ -594,37 +622,29 @@ pub struct MedicalObject3D {
     min_point: Vec3d,
     max_point: Vec3d,
     radius: f64,
-    containing_radius: f64,
+    cell_length: f64,
     containing_spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
+    grid: Grid<ColoredSphere>,
     color_threshold: f32,
 }
 
 impl MedicalObject3D {
-    pub fn new(
-        voxels: Vec<Voxel>,
-        radius: f64,
-        containing_radius: f64,
-        color_threshold: f32,
-    ) -> Self {
+    pub fn new(voxels: Vec<Voxel>, radius: f64, cell_length: f64, color_threshold: f32) -> Self {
         let mut obj = MedicalObject3D {
             _coordinate_system: CoordinateSystem3D::standard(),
             min_point: Vec3d::new(0.0, 0.0, 0.0),
             max_point: Vec3d::new(0.0, 0.0, 0.0),
             radius,
-            containing_radius,
+            cell_length,
             containing_spheres: Vec::new(),
+            grid: Grid::<ColoredSphere>::new(Vec3d::new(0.0, 0.0, 0.0), 0.0),
             color_threshold,
         };
-        obj.deduce_bounding_box_and_position_spheres(voxels, radius, containing_radius);
+        obj.deduce_bounding_box_and_position_spheres(voxels, radius);
         obj
     }
 
-    fn deduce_bounding_box_and_position_spheres(
-        &mut self,
-        voxels: Vec<Voxel>,
-        radius: f64,
-        containing_radius: f64,
-    ) {
+    fn deduce_bounding_box_and_position_spheres(&mut self, voxels: Vec<Voxel>, radius: f64) {
         // deduce bounding box
         let mut min_point = Vec3d::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
         let mut max_point = Vec3d::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -639,17 +659,17 @@ impl MedicalObject3D {
 
         self.min_point = min_point;
         self.max_point = max_point;
+        self.grid = Grid::<ColoredSphere>::new(min_point, self.cell_length);
 
         // position spheres
-        let diameter = containing_radius * 2.0;
+        let diameter = self.cell_length * (3.0_f64).sqrt();
         let mut current_point = min_point;
         while current_point.x <= max_point.x {
             while current_point.y <= max_point.y {
                 while current_point.z <= max_point.z {
                     // Here you would add a sphere at current_point with the calculated radius
-                    self.containing_spheres.push(WrappedContainingSphere::new(
-                        ContainingSphere::new(current_point, containing_radius),
-                    ));
+                    self.containing_spheres
+                        .push(self.grid.get_containing_sphere(current_point));
                     current_point.z += diameter; // Move to the next position in z
                 }
                 current_point.y += diameter; // Move to the next position in y
@@ -675,7 +695,7 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
     }
 
     fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredSphere> {
-        let diameter = self.containing_radius * 2.0;
+        let diameter = self.cell_length * (3.0_f64).sqrt() * 2.0;
         let index_x = ((point.x - self.min_point.x) / diameter).floor() as usize;
         let index_y = ((point.y - self.min_point.y) / diameter).floor() as usize;
         let index_z = ((point.z - self.min_point.z) / diameter).floor() as usize;
@@ -685,13 +705,7 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
         if index < self.containing_spheres.len() {
             return self.containing_spheres[index].clone();
         }
-        // calculate the center of the containing sphere
-        let center = Vec3d::new(
-            self.min_point.x + (index_x as f64 + 0.5) * diameter,
-            self.min_point.y + (index_y as f64 + 0.5) * diameter,
-            self.min_point.z + (index_z as f64 + 0.5) * diameter,
-        );
-        WrappedContainingSphere::new(ContainingSphere::new(center, self.containing_radius))
+        self.grid.get_containing_sphere(point)
     }
 
     fn deduce_hit_color(
