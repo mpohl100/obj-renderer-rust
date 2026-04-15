@@ -579,6 +579,159 @@ impl ObjectLike<ColoredSphere> for UniverseObject2D {
     }
 }
 
+pub struct Voxel {
+    pub position: Vec3d,
+    pub color: [f32; 3],
+}
+
+pub struct MedicalObject3D {
+    _coordinate_system: CoordinateSystem3D,
+    min_point: Vec3d,
+    max_point: Vec3d,
+    radius: f64,
+    containing_radius: f64,
+    containing_spheres: Vec<WrappedContainingSphere<ColoredSphere>>,
+    color_threshold: f32,
+}
+
+impl MedicalObject3D {
+    pub fn new(voxels: Vec<Voxel>, radius: f64, containing_radius: f64, color_threshold: f32) -> Self {
+        let mut obj = MedicalObject3D {
+            _coordinate_system: CoordinateSystem3D::standard(),
+            min_point: Vec3d::new(0.0, 0.0, 0.0),
+            max_point: Vec3d::new(0.0, 0.0, 0.0),
+            radius,
+            containing_radius,
+            containing_spheres: Vec::new(),
+            color_threshold,
+        };
+        obj.deduce_bounding_box_and_position_spheres(voxels, radius, containing_radius);
+        obj
+    }
+
+    fn deduce_bounding_box_and_position_spheres(
+        &mut self,
+        voxels: Vec<Voxel>,
+        radius: f64,
+        containing_radius: f64,
+    ) {
+        // deduce bounding box
+        let mut min_point = Vec3d::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+        let mut max_point = Vec3d::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for voxel in &voxels {
+            min_point.x = min_point.x.min(voxel.position.x);
+            min_point.y = min_point.y.min(voxel.position.y);
+            min_point.z = min_point.z.min(voxel.position.z);
+            max_point.x = max_point.x.max(voxel.position.x);
+            max_point.y = max_point.y.max(voxel.position.y);
+            max_point.z = max_point.z.max(voxel.position.z);
+        }
+
+        // position spheres
+        let diameter = containing_radius / (3.0_f64).sqrt() * 2.0;
+        let mut current_point = min_point;
+        while current_point.x <= max_point.x {
+            while current_point.y <= max_point.y {
+                while current_point.z <= max_point.z {
+                    // Here you would add a sphere at current_point with the calculated radius
+                    self.containing_spheres
+                        .push(WrappedContainingSphere::new(ContainingSphere::new(
+                            current_point,
+                            containing_radius,
+                        )));
+                    current_point.z += diameter; // Move to the next position in z
+                }
+                current_point.y += diameter; // Move to the next position in y
+                current_point.z = min_point.z; // Reset z to min
+            }
+            current_point.x += diameter; // Move to the next position in x
+            current_point.y = min_point.y; // Reset y to min
+            current_point.z = min_point.z; // Reset z to min
+        }
+
+        // add voxels to containing spheres
+        for voxel in voxels {
+            let point = voxel.position;
+            let containing_sphere = self.get_sphere(point);
+            containing_sphere.add_shape(ColoredSphere::new(
+                point,
+                radius,
+                voxel.color,
+            ));
+        }
+    }
+}
+
+impl ObjectLike<ColoredSphere> for MedicalObject3D {
+
+    fn radius(&self) -> f64 {
+        self.radius
+    }
+
+    fn get_sphere(&self, point: Vec3d) -> WrappedContainingSphere<ColoredSphere> {
+        let diameter = self.containing_radius / (3.0_f64).sqrt() * 2.0;
+        let index_x = ((point.x - self.min_point.x) / diameter).floor() as usize;
+        let index_y = ((point.y - self.min_point.y) / diameter).floor() as usize;
+        let index_z = ((point.z - self.min_point.z) / diameter).floor() as usize;
+        let spheres_per_y = ((self.max_point.y - self.min_point.y) / diameter).floor() as usize;
+        let spheres_per_z = ((self.max_point.z - self.min_point.z) / diameter).floor() as usize;
+        let index = index_x * spheres_per_y * spheres_per_z + index_y * spheres_per_z + index_z;
+        if index < self.containing_spheres.len() {
+            return self.containing_spheres[index].clone();
+        }
+        panic!("No containing sphere found for point {:?}", point);
+    }
+
+    fn deduce_hit_color(
+        &self,
+        ray: Ray,
+        containing_sphere: &WrappedContainingSphere<ColoredSphere>,
+    ) -> Option<[f32; 3]> {
+        let mut hit_color = None;
+        let mut min_dist = f64::INFINITY;
+        for ball in &containing_sphere.sphere.contained_shapes {
+            let color = ball.color;
+            let color_in_gray = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2];
+            if color_in_gray < self.color_threshold {
+                continue;
+            }
+            // Ray-sphere intersection
+            let oc = ray.origin - ball.sphere.center;
+            let a = Vec3d::dot(&ray.direction, &ray.direction);
+            let b = 2.0 * Vec3d::dot(&oc, &ray.direction);
+            let c = Vec3d::dot(&oc, &oc) - ball.sphere.radius * ball.sphere.radius;
+            let discriminant = b * b - 4.0 * a * c;
+            if discriminant > 0.0 {
+                let t1 = (-b - discriminant.sqrt()) / (2.0 * a);
+                let t2 = (-b + discriminant.sqrt()) / (2.0 * a);
+                let t = if t1 > 1e-6 { t1 } else { t2 };
+                if t > 1e-6
+                    && t < min_dist
+                {
+                    min_dist = t;
+                    hit_color = Some(ball.color);
+                }
+            }
+        }
+        hit_color
+    }
+
+    fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8] {
+        let min_point = self.min_point;
+        let max_point = self.max_point;
+        [
+            Vec3d::new(min_point.x, min_point.y, min_point.z),
+            Vec3d::new(min_point.x, min_point.y, max_point.z),
+            Vec3d::new(min_point.x, max_point.y, min_point.z),
+            Vec3d::new(min_point.x, max_point.y, max_point.z),
+            Vec3d::new(max_point.x, min_point.y, min_point.z),
+            Vec3d::new(max_point.x, min_point.y, max_point.z),
+            Vec3d::new(max_point.x, max_point.y, min_point.z),
+            Vec3d::new(max_point.x, max_point.y, max_point.z),
+        ]
+    }
+}
+
 struct RayIntersector<Shape: HasVertices + Clone + 'static, O: ObjectLike<Shape>> {
     _marker: std::marker::PhantomData<O>,
     _shape_marker: std::marker::PhantomData<Shape>,
