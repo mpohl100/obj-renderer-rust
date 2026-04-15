@@ -2,7 +2,6 @@ use rs_math3d::FloatVector;
 use rs_math3d::Vector;
 use rs_math3d::{CrossProduct, Vec3d};
 
-use core::panic;
 use std::sync::Arc;
 
 use crate::camera::Camera;
