@@ -1,3 +1,3 @@
 #Use microsoft devcontainer
 ARG VARIANT=bullseye
-FROM mcr.microsoft.com/vscode/devcontainers/rust:1-${VARIANT}
+FROM mcr.microsoft.com/vscode/devcontainers/rust:${VARIANT}
