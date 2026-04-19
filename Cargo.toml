@@ -1,7 +1,7 @@
 [package]
 name = "obj-renderer-rust"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 
@@ -9,6 +9,9 @@ wavefront_obj = "11.0.0"
 rs-math3d = "0.9.24"
 clap = { version = "4.5", features = ["derive"] }
 image = "0.24"
+
+dicom-object = "0.9.1"
+dicom-pixeldata = { version = "0.9.1", features = ["image"] }
 
 [[bin]]
 name = "obj-renderer-rust"
@@ -19,5 +22,9 @@ name = "roundabout_scene"
 path = "src/roundabout_scene.rs"
 
 [[bin]]
-name = "universe_Scene"
+name = "universe_scene"
 path = "src/universe_scene.rs"
+
+[[bin]]
+name = "medical_scene"
+path = "src/medical_scene.rs"
