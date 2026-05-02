@@ -17,8 +17,6 @@ pub struct Camera {
     pub up: Vec3d,
     pub fov: f32,
     pub aspect_ratio: f32,
-    pub near: f32,
-    pub far: f32,
 }
 
 impl Camera {
@@ -28,8 +26,6 @@ impl Camera {
     /// @param up Up direction
     /// @param fov Field of view
     /// @param aspect_ratio Aspect ratio
-    /// @param near Near plane
-    /// @param far Far plane
     /// @return Camera
     pub fn new(
         position: Vec3d,
@@ -37,8 +33,6 @@ impl Camera {
         up: Vec3d,
         fov: f32,
         aspect_ratio: f32,
-        near: f32,
-        far: f32,
     ) -> Self {
         Camera {
             position,
@@ -46,8 +40,6 @@ impl Camera {
             up,
             fov,
             aspect_ratio,
-            near,
-            far,
         }
     }
 
@@ -81,6 +73,11 @@ impl Camera {
     /// @brief Returns the focal point of the camera
     pub fn focal_point(&self) -> Vec3d {
         self.look_at
+    }
+
+    pub fn locate(&mut self, new_position: Vec3d, look_at: Vec3d) {
+        self.position = new_position;
+        self.look_at = look_at;
     }
 }
 
