@@ -27,8 +27,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vec3d::new(0.0, 1.0, 0.0), // up
         60.0,                      // fov
         16.0 / 9.0,                // aspect ratio
-        0.1,                       // near
-        100.0,                     // far
     );
     let scene = Scene::new(obj, camera);
     println!("Loaded scene with universe.");

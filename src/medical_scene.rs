@@ -1,5 +1,5 @@
 use obj_renderer_rust::camera::Camera;
-use obj_renderer_rust::scene::{Scene, Voxel, MedicalObject3D};
+use obj_renderer_rust::scene::{MedicalObject3D, Scene, Voxel};
 
 use clap::Parser;
 
@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use dicom_object::{open_file, DefaultDicomObject};
+use dicom_object::{DefaultDicomObject, open_file};
 use dicom_pixeldata::PixelDecoder;
 
 /// @brief Command line arguments for obj-renderer
@@ -126,8 +126,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vec3d::new(0.0, 1.0, 0.0), // up
         60.0,                      // fov
         16.0 / 9.0,                // aspect ratio
-        0.1,                       // near
-        100.0,                     // far
     );
     let scene = Scene::new(obj, camera);
     println!("Loaded scene with medical object.");

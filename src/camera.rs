@@ -27,13 +27,7 @@ impl Camera {
     /// @param fov Field of view
     /// @param aspect_ratio Aspect ratio
     /// @return Camera
-    pub fn new(
-        position: Vec3d,
-        look_at: Vec3d,
-        up: Vec3d,
-        fov: f32,
-        aspect_ratio: f32,
-    ) -> Self {
+    pub fn new(position: Vec3d, look_at: Vec3d, up: Vec3d, fov: f32, aspect_ratio: f32) -> Self {
         Camera {
             position,
             look_at,
