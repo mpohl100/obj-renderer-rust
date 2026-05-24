@@ -38,11 +38,7 @@ pub fn ray_triangle_intersect(
         return None;
     }
     let t = f * rs_math3d::Vec3d::dot(&edge2, &q);
-    if t > 1e-6 {
-        Some(t)
-    } else {
-        None
-    }
+    if t > 1e-6 { Some(t) } else { None }
 }
 
 /// @brief Represents a colored triangle in 3D space
@@ -216,6 +212,9 @@ pub trait ObjectLike<Shape: HasVertices + Clone + 'static> {
         containing_sphere: &WrappedContainingSphere<Shape>,
     ) -> Option<[f32; 3]>;
     fn get_all_eight_corners_of_min_max_point(&self) -> [Vec3d; 8];
+    fn center(&self) -> Vec3d;
+    fn bounding_sphere(&self) -> Sphere;
+    fn bounding_box_radius(&self) -> f64;
 }
 
 #[derive(Clone)]
@@ -409,11 +408,11 @@ impl ObjectLike<ColoredTriangle> for Object3D {
         let mut hit_color = None;
         let mut min_dist = f64::INFINITY;
         for tri in &containing_sphere.sphere.contained_shapes {
-            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices) {
-                if dist < min_dist {
-                    min_dist = dist;
-                    hit_color = Some(tri.color);
-                }
+            if let Some(dist) = ray_triangle_intersect(&ray, &tri.vertices)
+                && dist < min_dist
+            {
+                min_dist = dist;
+                hit_color = Some(tri.color);
             }
         }
         hit_color
@@ -432,6 +431,21 @@ impl ObjectLike<ColoredTriangle> for Object3D {
             Vec3d::new(max_point.x, max_point.y, min_point.z),
             Vec3d::new(max_point.x, max_point.y, max_point.z),
         ]
+    }
+
+    fn center(&self) -> Vec3d {
+        self.center()
+    }
+
+    fn bounding_sphere(&self) -> Sphere {
+        Sphere {
+            center: self.center(),
+            radius: self.bounding_sphere_radius(),
+        }
+    }
+
+    fn bounding_box_radius(&self) -> f64 {
+        self.bounding_box_radius()
     }
 }
 
@@ -610,6 +624,21 @@ impl ObjectLike<ColoredSphere> for UniverseObject2D {
             Vec3d::new(max_point.x, max_point.y, max_point.z),
         ]
     }
+
+    fn center(&self) -> Vec3d {
+        (self.min_point + self.max_point) * 0.5
+    }
+
+    fn bounding_sphere(&self) -> Sphere {
+        Sphere {
+            center: self.center(),
+            radius: self.radius,
+        }
+    }
+
+    fn bounding_box_radius(&self) -> f64 {
+        (self.max_point - self.center()).length()
+    }
 }
 
 pub struct Voxel {
@@ -753,6 +782,30 @@ impl ObjectLike<ColoredSphere> for MedicalObject3D {
             Vec3d::new(max_point.x, max_point.y, min_point.z),
             Vec3d::new(max_point.x, max_point.y, max_point.z),
         ]
+    }
+
+    fn center(&self) -> Vec3d {
+        (self.min_point + self.max_point) * 0.5
+    }
+
+    fn bounding_sphere(&self) -> Sphere {
+        Sphere {
+            center: self.center(),
+            radius: self.bounding_box_radius(),
+        }
+    }
+
+    fn bounding_box_radius(&self) -> f64 {
+        let center = self.center();
+        let mut max_distance = 0.0;
+        for sphere in &self.containing_spheres {
+            let distance =
+                (sphere.sphere.sphere.center - center).length() + sphere.sphere.sphere.radius;
+            if distance > max_distance {
+                max_distance = distance;
+            }
+        }
+        max_distance
     }
 }
 

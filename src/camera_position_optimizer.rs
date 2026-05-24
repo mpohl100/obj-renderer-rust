@@ -3,13 +3,13 @@ use crate::camera::Ray;
 use crate::coordinate_system::CoordinateSystem3D;
 use crate::coordinate_system::SphericalCoordinates;
 use crate::linear_optimizer::Objective;
+use crate::scene::HasVertices;
 use crate::scene::Object3D;
 use crate::scene::ObjectLike;
-use crate::scene::HasVertices;
+use rs_math3d::CrossProduct;
 use rs_math3d::FloatVector;
 use rs_math3d::Vector3;
 use rs_math3d::{Vec3d, Vector};
-use rs_math3d::CrossProduct;
 
 #[derive(Clone)]
 pub struct CameraRay {
@@ -77,10 +77,9 @@ impl Area {
         let sin_angle = angle_radians.sin();
         let axis = self.normal.normalize();
 
-        let rotated_vector = vector * cos_angle
+        vector * cos_angle
             + Vector3::<f64>::cross(&axis, &vector) * sin_angle
-            + axis * Vector3::<f64>::dot(&axis, &vector) * (1.0 - cos_angle);
-        rotated_vector
+            + axis * Vector3::<f64>::dot(&axis, &vector) * (1.0 - cos_angle)
     }
 }
 
@@ -99,13 +98,7 @@ impl CameraPositionOptimizer {
             phi: spherical_coordinates.phi,
         };
         let target_point = center + adjusted_spherical_coordinates.to_cartesian();
-        let camera = Camera::new(
-            target_point,
-            center,
-            Vec3d::new(0.0, 1.0, 0.0),
-            45.0,
-            1.0,
-        );
+        let camera = Camera::new(target_point, center, Vec3d::new(0.0, 1.0, 0.0), 45.0, 1.0);
         let camera_ray = CameraRay::new(camera);
         CameraPositionOptimizer {
             object3d,
@@ -224,7 +217,7 @@ impl Objective for CameraPositionOptimizer {
 }
 
 #[derive(Clone)]
-pub struct BlankSpaceRatios{
+pub struct BlankSpaceRatios {
     top: f64,
     bottom: f64,
 }
@@ -234,8 +227,6 @@ impl BlankSpaceRatios {
         BlankSpaceRatios { top, bottom }
     }
 }
-
-#[derive(Clone)]
 pub struct NewCameraPositionOptimizer<Shape: HasVertices + Clone + 'static> {
     marker: std::marker::PhantomData<Shape>,
     object: Box<dyn ObjectLike<Shape>>,
@@ -243,7 +234,11 @@ pub struct NewCameraPositionOptimizer<Shape: HasVertices + Clone + 'static> {
 }
 
 impl<Shape: HasVertices + Clone + 'static> NewCameraPositionOptimizer<Shape> {
-    pub fn new(camera: Camera, object_like: impl ObjectLike<Shape> + 'static, spherical_coordinates: SphericalCoordinates) -> Self {
+    pub fn new(
+        camera: Camera,
+        object_like: impl ObjectLike<Shape> + 'static,
+        spherical_coordinates: SphericalCoordinates,
+    ) -> Self {
         let object = Box::new(object_like);
         let center = object.center();
         let adjusted_spherical_coordinates = SphericalCoordinates {
@@ -267,13 +262,13 @@ impl<Shape: HasVertices + Clone + 'static> NewCameraPositionOptimizer<Shape> {
             self.object.center(),
         );
 
-        let perpendicular_to_up_direction_area = Area::new(
-            self.camera.up.normalize(),
-            self.object.center(),
-        );
+        let perpendicular_to_up_direction_area =
+            Area::new(self.camera.up.normalize(), self.object.center());
 
-        let left_to_right_direction = perpendicular_to_camera_area.calculate_intersection_direction_with_area(perpendicular_to_up_direction_area);
-        let top_to_bottom_direction = perpendicular_to_camera_area.rotate_vector(left_to_right_direction, 90.0);
+        let left_to_right_direction = perpendicular_to_camera_area
+            .calculate_intersection_direction_with_area(perpendicular_to_up_direction_area);
+        let top_to_bottom_direction =
+            perpendicular_to_camera_area.rotate_vector(left_to_right_direction, 90.0);
 
         let ray_through_center = Ray {
             origin: self.object.center(),
@@ -281,24 +276,27 @@ impl<Shape: HasVertices + Clone + 'static> NewCameraPositionOptimizer<Shape> {
         };
 
         // calculate intersection points of the ray through center and the bounding sphere of the object
-        let bounding_sphere_radius = self.object.bounding_sphere().radius();
+        let bounding_sphere_radius = self.object.bounding_sphere().radius;
         // we multiply the space ratio by two because the bounding sphere radius is only half the length of the object
-        let up_point_of_fov = ray_through_center.origin + ray_through_center.direction * (bounding_sphere_radius + space_ratios.top * 2.0);
-        let down_point_of_fov = ray_through_center.origin - ray_through_center.direction * (bounding_sphere_radius + space_ratios.bottom * 2.0);
-        
+        let up_point_of_fov = ray_through_center.origin
+            + ray_through_center.direction * (bounding_sphere_radius + space_ratios.top * 2.0);
+        let down_point_of_fov = ray_through_center.origin
+            - ray_through_center.direction * (bounding_sphere_radius + space_ratios.bottom * 2.0);
+
         let new_look_at = (up_point_of_fov + down_point_of_fov) * 0.5;
         let new_look_at_to_current_position_ray = Ray {
             origin: new_look_at,
             direction: (self.camera.position - new_look_at).normalize(),
         };
         // the distance of the look at to the camera position is determined by the distance of up_point_of_fov to new_look_at being the sine of the fov
-        let distance_to_camera = (up_point_of_fov - new_look_at).length() / ((self.camera.fov.to_radians() as f64) / 2.0).sin();
-        let new_position = new_look_at + new_look_at_to_current_position_ray.direction * distance_to_camera;
+        let distance_to_camera = (up_point_of_fov - new_look_at).length()
+            / ((self.camera.fov.to_radians() as f64) / 2.0).sin();
+        let new_position =
+            new_look_at + new_look_at_to_current_position_ray.direction * distance_to_camera;
 
         let mut new_camera = self.camera.clone();
 
         new_camera.locate(new_position, new_look_at);
         new_camera
     }
-}   
-
+}
